@@ -122,24 +122,23 @@ Prices and economy rules are in `server/src/config.js` (`ECONOMY`, `POWERUPS`).
 
 ## Deployment
 
-| Part | Host | URL |
+Everyone uses one address: **https://khiana-spectator.vercel.app**
+
+| Path | Page | Source |
 |---|---|---|
-| Landing + game (`client/`) | Vercel, project `khiana` | https://khiana-gold.vercel.app |
-| Spectator (`spectator/`) | Vercel, project `khiana-spectator` | https://khiana-spectator.vercel.app |
-| Game server (`server/`) | Railway, service `KHIANA` | https://khiana-production-e696.up.railway.app |
+| `/` | Landing + lobbies | `client/` |
+| `/play.html` | The game | `client/` |
+| `/spectate/` | Spectator | `spectator/` |
 
-The server can't run on Vercel: it holds WebSocket connections and runs a tick loop, so it needs a long-lived process.
+The game server runs separately on Railway at https://khiana-production-e696.up.railway.app. It can't run on Vercel: it holds WebSocket connections and runs a tick loop, so it needs a long-lived process.
 
-**Server (Railway).** The service's root directory is `server/`, start command `node src/index.js`, health check `/health`. Its variables are the `.env` values except `PORT` (Railway sets it). It redeploys on every push to `main`. To deploy local code without pushing: `railway up --service KHIANA` from the repo root (`.railwayignore` keeps `.env` and the frontends out of the upload).
-
-**Frontends (Vercel).** The server address is baked in at build time:
+**Frontend (Vercel project `khiana-spectator`).** `scripts/build-web.mjs` builds the client at the root and the spectator under `/spectate/` into `web-dist/`, with the server address baked in. `vercel.json` at the repo root runs it; `.vercelignore` uploads only `client/`, `spectator/` and `scripts/`, so `.env` never leaves your machine. Deploy from the repo root:
 ```bash
-S=https://khiana-production-e696.up.railway.app
-cd spectator && vercel deploy --prod -b VITE_WS_URL=wss://${S#https://} -b VITE_API_URL=$S
-cd client    && vercel deploy --prod -b VITE_WS_URL=wss://${S#https://} -b VITE_API_URL=$S \
-                  -b VITE_SPECTATOR_URL=https://khiana-spectator.vercel.app
+vercel deploy --prod
 ```
-`khiana.vercel.app` belongs to another account, so the game is on `khiana-gold.vercel.app`; add a custom domain in the Vercel project's Settings → Domains.
+Point it at another server with `KHIANA_SERVER_URL=https://… node scripts/build-web.mjs`.
+
+**Server (Railway service `KHIANA`).** Root directory `server/`, start command `node src/index.js`, health check `/health`. Its variables are the `.env` values except `PORT` (Railway sets it). To deploy local code without pushing: `railway up --service KHIANA` from the repo root (`.railwayignore` keeps `.env` and the frontends out).
 
 ## House rules
 

@@ -8,8 +8,8 @@
 
 **A first-person maze where an AI advisor guides you through the dark, and it may have been paid, on-chain, to walk you into a wall.**
 
-[![Play](https://img.shields.io/badge/Play-khiana--gold.vercel.app-6E54FF?style=for-the-badge)](https://khiana-gold.vercel.app)
-[![Spectate](https://img.shields.io/badge/Spectate-khiana--spectator.vercel.app-85E6FF?style=for-the-badge)](https://khiana-spectator.vercel.app)
+[![Play](https://img.shields.io/badge/Play-khiana--spectator.vercel.app-6E54FF?style=for-the-badge)](https://khiana-spectator.vercel.app)
+[![Spectate](https://img.shields.io/badge/Spectate-%2Fspectate-85E6FF?style=for-the-badge)](https://khiana-spectator.vercel.app/spectate/)
 [![Monad Testnet](https://img.shields.io/badge/Monad-Testnet%2010143-836EF9?style=for-the-badge)](https://testnet.monadscan.com/)
 [![x402](https://img.shields.io/badge/x402-EIP--3009-85E6FF?style=for-the-badge)](https://docs.monad.xyz/guides/x402)
 

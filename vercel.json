@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd client && npm ci && cd ../spectator && npm ci",
+  "buildCommand": "node scripts/build-web.mjs",
+  "outputDirectory": "web-dist",
+  "redirects": [{ "source": "/spectate", "destination": "/spectate/", "permanent": false }]
+}

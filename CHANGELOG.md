@@ -43,7 +43,7 @@ See `docs/POWERUPS.md`. Briefly: bribery cheaper than Freeze; Audit dearer than 
 ## [Unreleased]
 
 ### Added
-- **Deployed.** Game on Vercel (https://khiana-gold.vercel.app), spectator on Vercel (https://khiana-spectator.vercel.app), server on Railway (root `server/`, health check `/health`). Steps in `docs/DEVELOPMENT.md`.
+- **Deployed at one address: https://khiana-spectator.vercel.app.** Landing at `/`, game at `/play.html`, spectator at `/spectate/`, built together by `scripts/build-web.mjs`. Server on Railway (root `server/`, health check `/health`). Steps in `docs/DEVELOPMENT.md`.
 - **Gemini and OpenAI as model providers** (`LLM_PROVIDER=gemini|openai`), through the existing OpenAI-compatible client. `LLM_RPM` caps model calls per minute so a free tier's limit sends extra advisors to the scripted brain instead of to a 429. Failed calls now record why in `/health`. [Phase 9]
 - **Paid tables with Connect Wallet.** A lobby can charge an entry fee in MON (0.01 or 0.1). Players connect their own browser wallet, pay into the new `KhianaPot` contract, and sign a message to claim their seat; the server checks both on chain before seating. Surviving paying winners split the pot; if none won, entrants are refunded. Anyone can force full refunds after the pot's deadline. `npm run pot:test`: 17/17 on Monad testnet. [Phase 9]
 - **Platform revenue.** A 5% rake on paid-table pots (MON) and a 5% fee on every released bribe (KHIA), both to `TREASURY_ADDRESS` and capped at 20% in the contracts. [Phase 9]

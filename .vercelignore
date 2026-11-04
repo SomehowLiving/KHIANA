@@ -1,0 +1,14 @@
+# Upload only what the static site needs. Everything else — .env with the
+# engine key, the server, the contracts — stays local.
+/*
+!/client
+!/spectator
+!/scripts
+!/vercel.json
+!/package.json
+client/node_modules
+spectator/node_modules
+client/.env*
+spectator/.env*
+client/.vercel
+spectator/.vercel

@@ -49,3 +49,8 @@ skills-lock.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Combined static site (scripts/build-web.mjs) and Vercel link files
+web-dist/
+.vercel
+.env*
