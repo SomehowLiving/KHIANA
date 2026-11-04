@@ -10,11 +10,11 @@ import { CONFIG } from '../config.js';
  * anyone in that room will believe.
  */
 
-export function createLedger() {
+export function createLedger(players = CONFIG.GAME.PLAYERS) {
   return {
     entries: [],
     burned: 0,
-    startingSupply: CONFIG.GAME.PLAYERS * CONFIG.ECONOMY.STARTING_MON,
+    startingSupply: players * CONFIG.ECONOMY.STARTING_MON,
   };
 }
 

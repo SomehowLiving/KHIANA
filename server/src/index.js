@@ -3,7 +3,7 @@ import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 
-import { CONFIG } from './config.js';
+import { CONFIG, TABLE_SIZES, rulesFor } from './config.js';
 import { checkFacilitator } from './economy/x402.js';
 import { mountX402 } from './economy/x402-server.js';
 import { providerStatus } from './agents/llm.js';
@@ -79,6 +79,11 @@ app.get('/config', (_req, res) => {
   res.json({
     players: CONFIG.GAME.PLAYERS,
     saboteurs: CONFIG.GAME.SABOTEURS,
+    // Lobbies choose a size; these are the rules each size plays by.
+    tableSizes: TABLE_SIZES.map(n => {
+      const r = rulesFor(n);
+      return { players: n, saboteurs: r.SABOTEURS, survivorsToEscape: r.SURVIVORS_TO_ESCAPE, mazeSize: r.MAZE_SIZE };
+    }),
     tasksToWin: CONFIG.GAME.TASKS_TO_WIN,
     totalTicks: CONFIG.GAME.TOTAL_TICKS,
     tickSeconds: CONFIG.GAME.TICK_MS / 1000,
@@ -186,6 +191,7 @@ app.post('/rooms', (req, res) => {
       isPublic: req.body?.isPublic !== false,
       hostName: req.body?.hostName,
       seed: req.body?.seed,
+      players: req.body?.players,
     });
     res.json({ ok: true, room: roomSummary(room) });
   } catch (err) {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-import { CONFIG } from './config.js';
+import { CONFIG, TABLE_SIZES } from './config.js';
 import { createGame, runTick, resolveTick, movePlayer, endGame } from './game/engine.js';
 import { playerView, spectatorView } from './game/fog.js';
 import { stepAllBots, claimSeat, releaseSeat, firstOpenSeat } from './agents/bots.js';
@@ -50,12 +50,14 @@ function newCode() {
  * lobby plays the identical game with mocked settlement.
  */
 function newGame(room, seed) {
-  const game = createGame({ seed: seed ?? Date.now() });
+  const game = createGame({ seed: seed ?? Date.now(), playerCount: room.players });
   game.onChain = Boolean(room.onChain);
   return game;
 }
 
-export function createRoom({ name, isPublic = true, seed, hostName, code: fixedCode, onChain = false } = {}) {
+export function createRoom({ name, isPublic = true, seed, hostName, code: fixedCode, onChain = false, players } = {}) {
+  // Table size is chosen per lobby: 4 or 8 seats. Anything else gets the default.
+  const seats = TABLE_SIZES.includes(Number(players)) ? Number(players) : CONFIG.GAME.PLAYERS;
   if (rooms.size >= MAX_ROOMS) throw new Error('server is at room capacity');
 
   /**
@@ -71,6 +73,7 @@ export function createRoom({ name, isPublic = true, seed, hostName, code: fixedC
     code,
     name: (name || `${hostName ? hostName + "'s" : 'Open'} lobby`).slice(0, 40),
     isPublic: Boolean(isPublic),
+    players: seats,
     onChain: Boolean(onChain),
     game: null,
     loop: null,
@@ -118,7 +121,7 @@ export function roomSummary(room) {
     name: room.name,
     isPublic: room.isPublic,
     humans: humanCount(room),
-    capacity: CONFIG.GAME.PLAYERS,
+    capacity: room.players,
     spectators: [...room.sockets.values()].filter(m => m.role === 'spectator').length,
     started: g.started,
     phase: g.phase,
@@ -127,7 +130,7 @@ export function roomSummary(room) {
     winner: g.winner,
     // Empty seats auto-fill with bots, so a game is always joinable until it
     // ends — "open" here means "you can still take a seat", not "waiting".
-    joinable: !g.winner && humanCount(room) < CONFIG.GAME.PLAYERS,
+    joinable: !g.winner && humanCount(room) < room.players,
     hostId: room.hostId,
     /** Seconds until bots take over, or null if a human is expected. */
     autoStartIn: room.autoStartAt ? Math.max(0, Math.round((room.autoStartAt - Date.now()) / 1000)) : null,
@@ -321,7 +324,7 @@ export async function startRoom(room) {
     // rather than settling against the wrong numbers.
     let stake = null;
     if (game.onChain) {
-      stake = await stakeAgents().catch(err => ({ ok: false, error: String(err?.message ?? err) }));
+      stake = await stakeAgents(Object.keys(game.players)).catch(err => ({ ok: false, error: String(err?.message ?? err) }));
       if (!stake.ok) {
         game.onChain = false;
         game.chainError = stake.error;
@@ -453,7 +456,7 @@ export function tickAutoStart(now = Date.now()) {
 
     // A full table has nobody left to wait for, so give the host only a short
     // grace period rather than the full ninety seconds.
-    const wait = humans >= CONFIG.GAME.PLAYERS ? 15_000 : AUTO_START_MS;
+    const wait = humans >= room.players ? 15_000 : AUTO_START_MS;
     if (!room.autoStartAt) room.autoStartAt = now + wait;
     else if (now >= room.autoStartAt) {
       room.autoStartAt = null;

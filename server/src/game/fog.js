@@ -1,4 +1,4 @@
-import { CONFIG, TEAM } from '../config.js';
+import { CONFIG, TEAM, rulesFor } from '../config.js';
 import { distance, isWalkable } from './maze.js';
 import { bearingTo, tileDistance } from './directions.js';
 
@@ -217,7 +217,7 @@ export function playerView(state, playerId) {
     // done, standing on it does nothing.
     exit: state.exit ?? null,
     exitOpen: state.tasksComplete >= CONFIG.GAME.TASKS_TO_WIN,
-    survivorsToEscape: CONFIG.GAME.SURVIVORS_TO_ESCAPE,
+    survivorsToEscape: (state.rules ?? rulesFor()).SURVIVORS_TO_ESCAPE,
     // Same concealment as `others`. Deaths stay public (you can see a body),
     // and the advisor's retainer stays public because that is the one thing
     // the game wants you reasoning about instead of team colour.
@@ -268,13 +268,13 @@ function objectiveFor(state, me) {
 
   if (me.team === TEAM.SABOTEUR) {
     const loyal = Object.values(state.players).filter(p => p.alive && p.team === TEAM.LOYALIST).length;
-    return `Cut the loyalists to ${CONFIG.GAME.LOYALISTS_ALIVE_TO_LOSE} (${loyal} left), or stall the tasks past the clock.`;
+    return `Cut the loyalists to ${(state.rules ?? rulesFor()).LOYALISTS_ALIVE_TO_LOSE} (${loyal} left), or stall the tasks past the clock.`;
   }
 
   if (done >= need) {
-    return `All tasks done. Get ${CONFIG.GAME.SURVIVORS_TO_ESCAPE} of you to the exit.`;
+    return `All tasks done. Get ${(state.rules ?? rulesFor()).SURVIVORS_TO_ESCAPE} of you to the exit.`;
   }
-  return `Complete ${need - done} more task${need - done === 1 ? '' : 's'}, then escape with ${CONFIG.GAME.SURVIVORS_TO_ESCAPE}.`;
+  return `Complete ${need - done} more task${need - done === 1 ? '' : 's'}, then escape with ${(state.rules ?? rulesFor()).SURVIVORS_TO_ESCAPE}.`;
 }
 
 /** Spectators see everything. This is the demo view. */
@@ -294,7 +294,7 @@ export function spectatorView(state) {
     tasks: state.tasks,
     exit: state.exit ?? null,
     exitOpen: state.tasksComplete >= CONFIG.GAME.TASKS_TO_WIN,
-    survivorsToEscape: CONFIG.GAME.SURVIVORS_TO_ESCAPE,
+    survivorsToEscape: (state.rules ?? rulesFor()).SURVIVORS_TO_ESCAPE,
     tick: state.tick,
     totalTicks: CONFIG.GAME.TOTAL_TICKS,
     phase: state.phase,

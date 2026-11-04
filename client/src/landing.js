@@ -80,7 +80,7 @@ function lobbyCard(r) {
       </div>
       <div class="seats" title="${r.humans} of ${r.capacity} seats taken">${seats}</div>
       <div class="meta">
-        <span><b>${r.humans}</b>/${r.capacity} humans</span>
+        <span><b>${r.humans}</b>/${r.capacity} humans · ${r.capacity}-seat table</span>
         <span>${status}</span>
       </div>
       <a class="btn ${r.joinable ? 'btn-primary' : 'btn-ghost'}"
@@ -123,7 +123,7 @@ el('create').addEventListener('click', async () => {
     const res = await api('/rooms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, isPublic: true }),
+      body: JSON.stringify({ name, isPublic: true, players: Number(el('tablesize')?.value ?? 8) }),
     }).then(r => r.json());
 
     if (!res.ok) throw new Error(res.error ?? 'Could not open a table');

@@ -205,6 +205,44 @@ export const CONFIG = {
   },
 };
 
+/**
+ * Rules that depend on how many people are at the table. A lobby picks 4 or 8
+ * seats; every game carries its own copy as `state.rules`, and the engine,
+ * fog, tasks and agents read that rather than CONFIG.GAME.
+ *
+ * The 8-seat column is CONFIG.GAME untouched, env overrides included. The
+ * 4-seat column is not "8 halved": 2 saboteurs against 2 loyalists would win
+ * at tick 1 under the ≤2-alive rule, and CONVERGE's four tiles cannot be
+ * covered by three loyalists. So: one saboteur, one kill to lose a loyalist
+ * majority, two to escape, three converge tiles, and a smaller maze so four
+ * people actually meet.
+ */
+export const TABLE_SIZES = [4, 8];
+
+export function rulesFor(players = CONFIG.GAME.PLAYERS) {
+  const g = CONFIG.GAME;
+  if (Number(players) === 4) {
+    return {
+      PLAYERS: 4,
+      SABOTEURS: 1,
+      LOYALISTS_ALIVE_TO_LOSE: 1,
+      SURVIVORS_TO_ESCAPE: 2,
+      TIMEOUT_TASKS_FOR_LOYALIST_WIN: g.TIMEOUT_TASKS_FOR_LOYALIST_WIN,
+      CONVERGE_TILES: 3,
+      MAZE_SIZE: Number(process.env.MAZE_SIZE_4 ?? 10),
+    };
+  }
+  return {
+    PLAYERS: g.PLAYERS,
+    SABOTEURS: g.SABOTEURS,
+    LOYALISTS_ALIVE_TO_LOSE: g.LOYALISTS_ALIVE_TO_LOSE,
+    SURVIVORS_TO_ESCAPE: g.SURVIVORS_TO_ESCAPE,
+    TIMEOUT_TASKS_FOR_LOYALIST_WIN: g.TIMEOUT_TASKS_FOR_LOYALIST_WIN,
+    CONVERGE_TILES: 4,
+    MAZE_SIZE: g.MAZE_SIZE,
+  };
+}
+
 export const TEAM = { LOYALIST: 'LOYALIST', SABOTEUR: 'SABOTEUR' };
 export const PHASE = {
   DELIBERATE: 'DELIBERATE',

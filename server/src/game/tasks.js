@@ -21,7 +21,7 @@ export const TASK_TYPES = {
 
 const ORDER = ['CALIBRATE', 'BRIDGE', 'SEQUENCE', 'HOLD', 'CONVERGE'];
 
-export function generateTasks(maze, seed = Date.now()) {
+export function generateTasks(maze, seed = Date.now(), rules = null) {
   const rng = makeRng(seed ^ 0x5f3759df);
   const floors = floorTiles(maze);
   const used = new Set();
@@ -44,7 +44,12 @@ export function generateTasks(maze, seed = Date.now()) {
   };
 
   return ORDER.map((type, i) => {
-    const spec = TASK_TYPES[type];
+    // CONVERGE asks for every hand the loyalists have: four tiles at an
+    // 8-seat table, three at 4 seats, where only three loyalists exist.
+    const spec = type === 'CONVERGE' && rules
+      ? { ...TASK_TYPES[type], players: rules.CONVERGE_TILES, tiles: rules.CONVERGE_TILES,
+          desc: `${rules.CONVERGE_TILES} players on ${rules.CONVERGE_TILES} tiles simultaneously` }
+      : TASK_TYPES[type];
     return {
       id: `task_${i + 1}`,
       index: i,

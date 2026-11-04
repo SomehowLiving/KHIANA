@@ -459,6 +459,10 @@ footer a:hover { border-bottom-color: var(--cyan); }
       <input type="text" id="code" placeholder="CODE" maxlength="6" aria-label="Room code" />
       <button class="btn btn-ghost" id="joincode" type="button">Join by code</button>
       <input type="text" id="hostname" placeholder="Name your table" maxlength="40" aria-label="New table name" />
+      <select id="tablesize" class="btn btn-ghost" aria-label="Table size">
+        <option value="8" selected>8 players · 2 saboteurs</option>
+        <option value="4">4 players · 1 saboteur</option>
+      </select>
       <button class="btn btn-primary" id="create" type="button">Open a table</button>
     </div>
     <div class="err" id="err" role="status" aria-live="polite"></div>

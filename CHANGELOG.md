@@ -43,6 +43,7 @@ See `docs/POWERUPS.md`. Briefly: bribery cheaper than Freeze; Audit dearer than 
 ## [Unreleased]
 
 ### Added
+- **4-player tables.** Each lobby chooses 4 or 8 seats when opened; the main table stays 8. A 4-seat game has 1 Saboteur, Saboteurs win at ≤1 Loyalist alive, 2 escape, CONVERGE needs 3 tiles, and the maze is 10×10. Staking and payout cover only the seats in play. Verified: a 4-seat game on Monad testnet passes `game:onchain` 11/11. [Phase 8]
 - `npm run game:onchain` — plays a full bot game on chain, then proves the books balance: every ledger entry has a transaction, every escrow closed, supply fell by exactly what was burned, and every agent wallet equals the engine's balance to the unit. Wired into `khiana.sh verify`. [Phase 1]
 - Agents are staked exactly `STARTING_MON` KHIA on chain before every live game, from the engine treasury (`economy/stakes.js`). Without this a second game started from whatever the first left behind. [Phase 1]
 - The end-of-game payout now settles on chain, as signed agent-to-agent transfers computed in wei from on-chain balances. It previously happened in memory only. [Phase 1]
@@ -66,6 +67,7 @@ See `docs/POWERUPS.md`. Briefly: bribery cheaper than Freeze; Audit dearer than 
 - Visibility is now computed once per tick and cached in `resolveEliminations` instead of twice per saboteur–victim pair. Bresenham sweeps are the hot path here. [Phase 2]
 
 ### Balance
+- 4-player tables: maze 10×10. At 24×24 Loyalists won 8 of 10 seeds because one Saboteur rarely met anyone; at 10×10 it is 5 / 5, with most games reaching tick 31–40. [Phase 8]
 - BOUNTY no longer burns. The reward (≥ 1.00) is set aside from the poster's balance when posted, paid to the claimant's agent on chain if delivered, and returned at game end if not. Previously the poster paid 2× the reward. [Phase 1]
 - Token supply: fixed 40 → `KHIA_SUPPLY` (default 1000) minted once into the engine treasury, still with no mint. 40 staked exactly one game; burns left too little to stake a second. [Phase 1]
 - **Bot movement 1 → 5 steps per tick (`STEPS_PER_TICK`).** A human gets the full 15-second MOVE window and covers several tiles; a bot taking one step under-moved by roughly 5x, so task tiles were never reached and every game stalled at 1/5 tasks forever. Tasks now land at 2–4 of 5. [Phase 8]

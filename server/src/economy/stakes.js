@@ -21,7 +21,9 @@ import { payBetween } from './x402.js';
  * round.
  */
 
-const agentIds = () => Array.from({ length: CONFIG.GAME.PLAYERS }, (_, i) => `p${i + 1}`);
+// The seats in play. A 4-seat game stakes and pays only p1–p4; p5–p8 keep
+// whatever they hold until an 8-seat game re-stakes them.
+const defaultIds = () => Array.from({ length: CONFIG.GAME.PLAYERS }, (_, i) => `p${i + 1}`);
 
 async function balancesWei(ids) {
   const out = {};
@@ -39,12 +41,11 @@ async function balancesWei(ids) {
  * each describes a world the chain does not agree with. Excess comes back to
  * the engine first, because the engine may need it to fund the top-ups.
  */
-export async function stakeAgents() {
+export async function stakeAgents(ids = defaultIds()) {
   const engine = walletFor('engine');
   if (!engine) return { ok: false, error: 'AGENT_MNEMONIC unset' };
   if (!creditAddress()) return { ok: false, error: 'CREDIT_ADDRESS unset' };
 
-  const ids = agentIds();
   const stake = parseEther(String(CONFIG.ECONOMY.STARTING_MON));
   const before = await balancesWei(ids);
 
@@ -98,8 +99,7 @@ export async function stakeAgents() {
  * engine, matched greedily so the payout is at most (payers + payees - 1)
  * transfers instead of two per agent.
  */
-export async function payoutOnChain(winners) {
-  const ids = agentIds();
+export async function payoutOnChain(winners, ids = defaultIds()) {
   if (!winners.length) return { ok: true, transfers: [], balances: null };
 
   const current = await balancesWei(ids);

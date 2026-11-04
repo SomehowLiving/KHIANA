@@ -11,7 +11,7 @@ import {
 import { mnemonicToAccount, privateKeyToAccount, generateMnemonic, english } from 'viem/accounts';
 import { monadTestnet } from 'viem/chains';
 
-import { CONFIG } from '../config.js';
+import { CONFIG, TABLE_SIZES } from '../config.js';
 
 /**
  * Agent wallet layer — Phase 1.
@@ -45,7 +45,8 @@ import { CONFIG } from '../config.js';
 const RESERVE_GAP_MS = 1_500;      // > 3 blocks (~1.2s). Safety margin included.
 const NATIVE_TRANSFER_GAS = 21_000n; // Monad charges on the LIMIT — never estimate this.
 
-export const AGENT_COUNT = CONFIG.GAME.PLAYERS;
+// Enough wallets for the largest table, whatever size this game is.
+export const AGENT_COUNT = Math.max(CONFIG.GAME.PLAYERS, ...TABLE_SIZES);
 
 // ── Chain clients ───────────────────────────────────────────────────────────
 

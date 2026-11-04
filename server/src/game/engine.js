@@ -1,4 +1,4 @@
-import { CONFIG, TEAM, PHASE } from '../config.js';
+import { CONFIG, TEAM, PHASE, rulesFor } from '../config.js';
 import { generateMaze, floorTiles, distance, isWalkable } from './maze.js';
 import { generateTasks, revealDueTasks, evaluateTasks } from './tasks.js';
 import { emptyEffects, applyPurchases, resolveBounties } from './powerups.js';
@@ -26,9 +26,12 @@ import { commitRoles, revealRoles, roleCommitSummary } from '../economy/roles.js
  */
 
 export function createGame({ seed = Date.now(), playerCount = CONFIG.GAME.PLAYERS } = {}) {
-  const maze = generateMaze(CONFIG.GAME.MAZE_SIZE, seed);
+  // Table-size rules (4 or 8 seats) travel with the game. See rulesFor.
+  const rules = rulesFor(playerCount);
+  playerCount = rules.PLAYERS;
+  const maze = generateMaze(rules.MAZE_SIZE, seed);
   const spawns = pickSpawns(maze, playerCount, seed);
-  const saboteurIdx = pickSaboteurs(playerCount, seed);
+  const saboteurIdx = pickSaboteurs(playerCount, seed, rules.SABOTEURS);
 
   const players = {};
   for (let i = 0; i < playerCount; i++) {
@@ -53,20 +56,21 @@ export function createGame({ seed = Date.now(), playerCount = CONFIG.GAME.PLAYER
 
   return {
     seed,
+    rules,
     maze,
     players,
     // The extraction tile. Placed as far as possible from every spawn so the
     // escape is a real journey across contested ground rather than a step to
     // the side — that traversal is the window a bought agent exploits.
     exit: pickExit(maze, spawns),
-    tasks: generateTasks(maze, seed),
+    tasks: generateTasks(maze, seed, rules),
     tasksComplete: 0,
     tick: 0,
     phase: PHASE.MOVE,
     effects: emptyEffects(),
     pendingPurchases: [],
     channel: [],               // the agent channel — spectators only
-    ledger: createLedger(),
+    ledger: createLedger(playerCount),
     winner: null,
     started: false,
     roleCommitHash: null,      // filled by RoleCommit.sol at start
@@ -117,10 +121,10 @@ function pickSpawns(maze, n, seed) {
   return chosen.slice(0, n);
 }
 
-function pickSaboteurs(n, seed) {
+function pickSaboteurs(n, seed, count) {
   const set = new Set();
   let s = seed;
-  while (set.size < CONFIG.GAME.SABOTEURS) {
+  while (set.size < count) {
     s = (s * 1103515245 + 12345) >>> 0;
     set.add(s % n);
   }
@@ -622,9 +626,10 @@ function resolveEliminations(state) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function checkWin(state) {
+  const rules = state.rules ?? rulesFor();
   const loyAlive = Object.values(state.players).filter(p => p.alive && p.team === TEAM.LOYALIST).length;
 
-  if (loyAlive <= CONFIG.GAME.LOYALISTS_ALIVE_TO_LOSE) {
+  if (loyAlive <= rules.LOYALISTS_ALIVE_TO_LOSE) {
     state.winner = TEAM.SABOTEUR;
     return TEAM.SABOTEUR;
   }
@@ -636,14 +641,14 @@ export function checkWin(state) {
     const escaped = Object.values(state.players).filter(
       p => p.alive && p.team === TEAM.LOYALIST && atExit(state, p)
     ).length;
-    if (escaped >= CONFIG.GAME.SURVIVORS_TO_ESCAPE) {
+    if (escaped >= rules.SURVIVORS_TO_ESCAPE) {
       state.winner = TEAM.LOYALIST;
       return TEAM.LOYALIST;
     }
   }
 
   if (state.tick >= CONFIG.GAME.TOTAL_TICKS) {
-    state.winner = state.tasksComplete >= CONFIG.GAME.TIMEOUT_TASKS_FOR_LOYALIST_WIN
+    state.winner = state.tasksComplete >= rules.TIMEOUT_TASKS_FOR_LOYALIST_WIN
       ? TEAM.LOYALIST
       : TEAM.SABOTEUR;
     return state.winner;
@@ -710,7 +715,7 @@ async function settlePayoutOnChain(state) {
     .filter(p => p.alive && p.team === state.winner)
     .map(p => p.id);
 
-  const res = await payoutOnChain(winners);
+  const res = await payoutOnChain(winners, Object.keys(state.players));
   state.reveal.payout = {
     ...state.reveal.payout,
     status: res.ok ? 'SETTLED' : 'FAILED',

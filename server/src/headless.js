@@ -13,10 +13,11 @@ const FAST_TICK = 0;   // no waiting; we only care about the simulation
 
 async function main() {
   const seed = Number(process.argv[2]) || Date.now();
-  const game = createGame({ seed });
+  // Optional second argument: table size, 4 or 8.
+  const game = createGame({ seed, playerCount: Number(process.argv[3]) || undefined });
 
   console.log(`\nKhiana headless — seed ${seed}`);
-  console.log(`maze ${game.maze.tiles.length}² · ${Object.keys(game.players).length} players · ${CONFIG.GAME.SABOTEURS} saboteurs\n`);
+  console.log(`maze ${game.maze.tiles.length}² · ${Object.keys(game.players).length} players · ${game.rules.SABOTEURS} saboteurs\n`);
 
   for (const p of Object.values(game.players)) {
     console.log(`  ${p.id} ${p.name.padEnd(10)} ${p.team.padEnd(9)} loyalty ${String(p.agent.goalWeight).padStart(3)} ${p.agent.personality.name}`);
