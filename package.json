@@ -6,7 +6,7 @@
   "scripts": {
     "setup": "cd server && npm i && cd ../client && npm i && cd ../spectator && npm i",
     "headless": "cd server && npm run headless",
-    "test": "cd server && node integration.test.mjs",
+    "test": "cd server && node game.test.mjs && node daynight.test.mjs && node integration.test.mjs",
     "server": "cd server && npm run dev",
     "client": "cd client && npm run dev",
     "spectator": "cd spectator && npm run dev"

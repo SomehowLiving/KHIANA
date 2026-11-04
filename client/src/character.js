@@ -1,151 +1,200 @@
 import * as THREE from 'three';
 
 /**
- * Procedural low-poly humanoid.
+ * The antenna bean.
  *
- * Replaces the previous "sphere balanced on a cylinder", which read as a
- * chess pawn rather than a person. This builds a jointed figure with a head,
- * torso, arms and legs, and animates a walk cycle by swinging the limbs.
+ * A chunky toy figure: a capsule body, a glass visor with two eye lights,
+ * stubby arms and feet, and an antenna whose bulb is the advisor link. The
+ * bulb pulses when an advisor briefs and goes dark when its player is out.
  *
- * ── Why procedural rather than a GLB ──────────────────────────────────────
+ * Built procedurally (no GLB) because eight of these share a frame with an
+ * instanced maze, and the silhouette is what carries at corridor distance.
+ * The interface (makeCharacter / animateCharacter / killCharacter /
+ * updateDeath, and rig.armL/armR/legL/legR) is unchanged from the old figure,
+ * so scene.js and the menus can use either.
  *
- * Eight of these are on screen at once and the maze already spends its draw
- * calls on instanced geometry. A rigged GLB per player means a loader, a
- * skinned mesh, an AnimationMixer and a network fetch before the first frame
- * renders — for a figure that is at most 40 pixels tall inside a dark
- * corridor. The silhouette is what carries at that size, so the budget goes
- * on the silhouette.
- *
- * If a real GLB is dropped in later, `loadCharacterGLB()` at the bottom is
- * the seam: it returns the same interface, so nothing else has to change.
+ * Seat colour is identity only, never team. The only team tell is the eye
+ * colour, and it is set only when the viewer already knows the team (a
+ * saboteur seeing a fellow saboteur, or the end-of-round reveal).
  */
 
-// Body proportions, in world units where one maze tile is 1.0.
-const P = {
-  height: 0.92,
-  headR: 0.115,
-  torsoW: 0.20, torsoH: 0.26, torsoD: 0.13,
-  limbR: 0.045,
-  armL: 0.24,
-  legL: 0.28,
-};
+export const INK = 0x1B1F4B;
+export const EYE_LOYAL = 0x7FF3FF;
+export const EYE_SAB = 0xFF3D7F;
 
-/**
- * @param {number} color        team colour
- * @param {boolean} isSaboteur  saboteurs get a heavier, hunched silhouette
- */
-export function makeCharacter(color, { isSaboteur = false, decoy = false } = {}) {
+// Per-seat character colours (p1..p8). Keep in sync with spectator/src/main.js.
+export const PLAYER_COLORS = [0x2FB8F5, 0xFF8A3D, 0x6ED34A, 0xFF5FA8, 0xFFC93C, 0x5B6CFF, 0x22D6A0, 0xB070FF];
+export function seatColor(id, fallbackIndex = 0) {
+  const m = /(\d+)/.exec(String(id ?? ''));
+  const i = m ? Number(m[1]) - 1 : fallbackIndex;
+  return PLAYER_COLORS[((i % 8) + 8) % 8];
+}
+
+// Three-band toon ramp shared by every bean: the stepped shading is what
+// makes it read as a toy rather than a lit plastic render.
+let ramp = null;
+function toonRamp() {
+  if (ramp) return ramp;
+  const data = new Uint8Array([90, 90, 90, 255, 175, 175, 175, 255, 255, 255, 255, 255]);
+  ramp = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
+  ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
+  ramp.needsUpdate = true;
+  return ramp;
+}
+
+const outlineMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
+
+/** Inverted-hull outline: a slightly larger back-faced copy in navy. */
+function outlined(geo, mat, grow = 1.08) {
   const g = new THREE.Group();
-
-  const skin = new THREE.MeshStandardMaterial({
-    color, roughness: 0.55, metalness: 0.12,
-    emissive: color, emissiveIntensity: decoy ? 0.5 : 0.22,
-    transparent: decoy, opacity: decoy ? 0.55 : 1,
-  });
-
-  // Darker material for limbs so the torso reads as the body's mass and the
-  // figure doesn't flatten into one colour blob at distance.
-  const dark = skin.clone();
-  dark.color = new THREE.Color(color).multiplyScalar(0.62);
-  dark.emissiveIntensity = decoy ? 0.35 : 0.10;
-
-  const box = (w, h, d, mat) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.castShadow = true;
-    return m;
-  };
-
-  // ── Torso ────────────────────────────────────────────────────────────────
-  const hipY = P.legL;
-  const torso = box(P.torsoW, P.torsoH, P.torsoD, skin);
-  torso.position.y = hipY + P.torsoH / 2;
-  // A slight forward lean sells "creeping through a maze" over "standing".
-  torso.rotation.x = isSaboteur ? 0.16 : 0.07;
-  g.add(torso);
-
-  // Shoulders: a slightly wider slab reads as a person even in silhouette.
-  const shoulders = box(P.torsoW * 1.18, 0.07, P.torsoD * 1.05, dark);
-  shoulders.position.y = hipY + P.torsoH - 0.02;
-  g.add(shoulders);
-
-  // ── Head ─────────────────────────────────────────────────────────────────
-  const head = new THREE.Mesh(new THREE.SphereGeometry(P.headR, 16, 12), skin);
-  head.position.y = hipY + P.torsoH + P.headR + 0.03;
-  head.castShadow = true;
-  g.add(head);
-
-  // A visor rather than eyes. Eyes at this scale become two dark dots that
-  // read as damage; a bright band reads as equipment and catches the torch.
-  const visor = new THREE.Mesh(
-    new THREE.BoxGeometry(P.headR * 1.5, 0.035, 0.02),
-    new THREE.MeshBasicMaterial({ color: isSaboteur ? 0xFF6A50 : 0x9BE8DF })
-  );
-  visor.position.set(0, head.position.y + 0.012, -P.headR * 0.92);
-  g.add(visor);
-
-  // ── Limbs ────────────────────────────────────────────────────────────────
-  // Each limb hangs from a pivot Group so rotating the pivot swings the whole
-  // limb from the joint, which is what makes the walk cycle look like walking
-  // rather than the parts sliding independently.
-  const limb = (len, mat) => {
-    const pivot = new THREE.Group();
-    const mesh = new THREE.Mesh(new THREE.CapsuleGeometry
-      ? new THREE.CapsuleGeometry(P.limbR, len - P.limbR * 2, 4, 8)
-      : new THREE.CylinderGeometry(P.limbR, P.limbR, len, 8), mat);
-    mesh.position.y = -len / 2;
-    mesh.castShadow = true;
-    pivot.add(mesh);
-    return pivot;
-  };
-
-  const shoulderY = hipY + P.torsoH - 0.04;
-  const armL = limb(P.armL, dark); armL.position.set(-P.torsoW / 2 - 0.03, shoulderY, 0);
-  const armR = limb(P.armL, dark); armR.position.set(P.torsoW / 2 + 0.03, shoulderY, 0);
-  const legL = limb(P.legL, dark); legL.position.set(-0.055, hipY, 0);
-  const legR = limb(P.legL, dark); legR.position.set(0.055, hipY, 0);
-  g.add(armL, armR, legL, legR);
-
-  g.userData.rig = { torso, head, visor, armL, armR, legL, legR };
-  g.userData.phase = Math.random() * Math.PI * 2;   // desync identical bots
-  g.userData.walk = 0;
-
+  const m = new THREE.Mesh(geo, mat);
+  const o = new THREE.Mesh(geo, outlineMat);
+  o.scale.setScalar(grow);
+  g.add(o, m);
+  g.userData.mesh = m;
   return g;
 }
 
+const B = {
+  r: 0.2,          // body radius
+  len: 0.34,       // capsule straight section
+  footY: 0.07,
+};
+
+/**
+ * @param {number} color  per-seat identity colour (never team)
+ * @param {{isSaboteur?: boolean, decoy?: boolean, scale?: number}} opts
+ */
+export function makeCharacter(color, { isSaboteur = false, decoy = false, scale = 1 } = {}) {
+  const root = new THREE.Group();
+  const g = new THREE.Group();          // inner group takes the hop/lean
+  root.add(g);
+
+  const body = new THREE.MeshToonMaterial({
+    color, gradientMap: toonRamp(),
+    transparent: decoy, opacity: decoy ? 0.55 : 1,
+  });
+  const limbMat = body.clone();
+  limbMat.color = new THREE.Color(color).multiplyScalar(0.78);
+  const belly = new THREE.MeshToonMaterial({ color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.55), gradientMap: toonRamp() });
+
+  // ── Body ────────────────────────────────────────────────────────────────
+  const bodyY = B.footY + B.r + B.len / 2 + 0.04;
+  const torso = outlined(new THREE.CapsuleGeometry(B.r, B.len, 6, 16), body, 1.07);
+  torso.position.y = bodyY;
+  g.add(torso);
+
+  // Belly patch, a flattened sphere on the front.
+  const bellyM = new THREE.Mesh(new THREE.SphereGeometry(B.r * 0.72, 16, 12), belly);
+  bellyM.scale.set(1, 1.1, 0.42);
+  bellyM.position.set(0, bodyY - 0.08, -B.r * 0.78);
+  g.add(bellyM);
+
+  // ── Visor + eyes ────────────────────────────────────────────────────────
+  const visorY = bodyY + B.len / 2 - 0.01;
+  const visor = outlined(
+    new THREE.CapsuleGeometry(0.075, 0.17, 4, 12),
+    new THREE.MeshToonMaterial({ color: 0x23285C, gradientMap: toonRamp() }),
+    1.12
+  );
+  visor.rotation.z = Math.PI / 2;
+  visor.scale.set(1, 1, 0.75);
+  visor.position.set(0, visorY, -B.r * 0.86);
+  g.add(visor);
+
+  const eyeMat = new THREE.MeshBasicMaterial({ color: isSaboteur ? EYE_SAB : EYE_LOYAL });
+  const eyeGeo = new THREE.CapsuleGeometry(0.022, 0.045, 3, 8);
+  const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+  const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeL.position.set(-0.06, visorY + 0.004, -B.r * 0.86 - 0.062);
+  eyeR.position.set(0.06, visorY + 0.004, -B.r * 0.86 - 0.062);
+  g.add(eyeL, eyeR);
+
+  // ── Antenna: the advisor link ───────────────────────────────────────────
+  const topY = bodyY + B.len / 2 + B.r;
+  const stalk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.016, 0.16, 6),
+    new THREE.MeshBasicMaterial({ color: INK })
+  );
+  stalk.position.y = topY + 0.07;
+  const bulbMat = new THREE.MeshBasicMaterial({ color: 0xFFE14D });
+  const bulb = outlined(new THREE.SphereGeometry(0.045, 12, 10), bulbMat, 1.25);
+  bulb.position.y = topY + 0.17;
+  g.add(stalk, bulb);
+
+  // ── Limbs ───────────────────────────────────────────────────────────────
+  const limb = (r, len, mat) => {
+    const pivot = new THREE.Group();
+    const part = outlined(new THREE.CapsuleGeometry(r, len, 4, 10), mat, 1.18);
+    part.position.y = -len / 2 - r * 0.4;
+    pivot.add(part);
+    return pivot;
+  };
+  const armL = limb(0.045, 0.12, limbMat); armL.position.set(-B.r - 0.03, bodyY + 0.02, 0); armL.rotation.z = -0.35;
+  const armR = limb(0.045, 0.12, limbMat); armR.position.set(B.r + 0.03, bodyY + 0.02, 0); armR.rotation.z = 0.35;
+  const legL = limb(0.055, 0.05, limbMat); legL.position.set(-0.085, B.footY + 0.09, 0);
+  const legR = limb(0.055, 0.05, limbMat); legR.position.set(0.085, B.footY + 0.09, 0);
+  g.add(armL, armR, legL, legR);
+
+  root.scale.setScalar(scale);
+  root.userData.rig = { inner: g, torso, head: torso, visor, eyeMat, bulb, bulbMat, armL, armR, legL, legR };
+  root.userData.phase = Math.random() * Math.PI * 2;
+  root.userData.walk = 0;
+  root.userData.pulse = 0;
+  return root;
+}
+
+/** Light the antenna bulb; it fades back over ~0.8s in animateCharacter. */
+export function pulseAntenna(character) {
+  if (!character.userData.dead) character.userData.pulse = 1;
+}
+
+/** Set eye colour once a team is known (reveal screen). */
+export function setTeamEyes(character, team) {
+  const rig = character.userData.rig;
+  rig?.eyeMat.color.setHex(team === 'SABOTEUR' ? EYE_SAB : EYE_LOYAL);
+}
+
+const BULB_IDLE = new THREE.Color(0xFFE14D);
+const BULB_HOT = new THREE.Color(0xFFFFFF);
+
 /**
  * Advance the walk cycle.
- *
- * @param {THREE.Group} character
- * @param {number} dt        seconds
- * @param {number} speed     0 = still, 1 = walking
- * @param {number} facing    yaw in radians, or null to leave facing alone
+ * @param {number} speed  0 = still, 1 = walking
+ * @param {number|null} facing  yaw in radians, or null to leave facing alone
  */
 export function animateCharacter(character, dt, speed, facing = null) {
   const rig = character.userData.rig;
   if (!rig) return;
 
-  // Ease the walk weight so stopping settles rather than snapping to a
-  // T-pose mid-stride.
   const target = Math.min(1, speed);
   character.userData.walk += (target - character.userData.walk) * Math.min(1, dt * 8);
   const w = character.userData.walk;
 
-  character.userData.phase += dt * (6.5 + w * 3);
-  const swing = Math.sin(character.userData.phase) * 0.85 * w;
+  character.userData.phase += dt * (5 + w * 6);
+  const ph = character.userData.phase;
+  const swing = Math.sin(ph) * 0.9 * w;
 
   rig.legL.rotation.x = swing;
   rig.legR.rotation.x = -swing;
-  // Arms counter-swing, and slightly less than the legs — same as people.
-  rig.armL.rotation.x = -swing * 0.72;
-  rig.armR.rotation.x = swing * 0.72;
+  rig.armL.rotation.x = -swing * 0.8;
+  rig.armR.rotation.x = swing * 0.8;
 
-  // A small vertical bob on double the stride frequency. This is the single
-  // cheapest thing that makes a walk read as weighted rather than gliding.
-  character.position.y = Math.abs(Math.sin(character.userData.phase)) * 0.022 * w;
+  // Toy waddle: side-to-side roll while walking, a slow breathing squash
+  // while idle. Both are on the inner group so position stays authoritative.
+  rig.inner.rotation.z = Math.sin(ph) * 0.12 * w;
+  rig.inner.position.y = Math.abs(Math.sin(ph)) * 0.05 * w;
+  const breathe = 1 + Math.sin(ph * 0.5) * 0.025 * (1 - w);
+  rig.inner.scale.set(1 / Math.sqrt(breathe), breathe, 1 / Math.sqrt(breathe));
+
+  // Antenna pulse decays.
+  if (character.userData.pulse > 0) {
+    character.userData.pulse = Math.max(0, character.userData.pulse - dt * 1.3);
+  }
+  rig.bulbMat.color.copy(character.userData.bulbIdle ?? BULB_IDLE).lerp(BULB_HOT, character.userData.pulse);
+  rig.bulb.scale.setScalar(1 + character.userData.pulse * 0.6);
 
   if (facing !== null) {
-    // Shortest-path rotation, so turning from +170° to -170° goes 20° the
-    // near way instead of 340° the wrong way.
     let d = facing - character.rotation.y;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
@@ -153,60 +202,37 @@ export function animateCharacter(character, dt, speed, facing = null) {
   }
 }
 
-/**
- * Elimination.
- *
- * Animated rather than teleported flat: a body that simply becomes horizontal
- * between two frames reads as a rendering glitch, not a death. The collapse
- * takes about 900ms, which is long enough to notice from across a corridor
- * and short enough not to hold up the tick.
- */
+/** Elimination: limbs go slack, the bean tips over, the antenna goes dark. */
 export function killCharacter(character) {
   if (character.userData.dead) return;
   character.userData.dead = true;
   character.userData.deathT = 0;
-
   const rig = character.userData.rig;
   if (rig) {
-    // Limbs go slack immediately; the fall is what takes time.
-    rig.armL.rotation.x = 0.5; rig.armR.rotation.x = -0.35;
-    rig.legL.rotation.x = 0.2; rig.legR.rotation.x = -0.15;
-    // Kill the visor: the light going out is the clearest "this one is gone"
-    // signal at distance, and it costs one material change.
-    if (rig.visor?.material) rig.visor.material.color.setHex(0x3A2320);
+    rig.armL.rotation.x = 0.6; rig.armR.rotation.x = -0.4;
+    rig.legL.rotation.x = 0.3; rig.legR.rotation.x = -0.2;
+    rig.bulbMat.color.setHex(0x4A4E70);
+    rig.bulb.scale.setScalar(1);
+    rig.eyeMat.color.setHex(0x3A3F66);
   }
 }
 
-/** Advance a collapse. Called from the scene's render loop. */
+/** Advance a collapse: a little hop, then a flop onto its back. */
 export function updateDeath(character, dt) {
   if (!character.userData.dead) return;
   const t = character.userData.deathT ?? 0;
   if (t >= 1) return;
-
   const next = Math.min(1, t + dt / 0.9);
   character.userData.deathT = next;
-
-  // Ease-out so it drops fast then settles, the way a body actually falls.
   const e = 1 - Math.pow(1 - next, 3);
-  character.rotation.x = -Math.PI / 2 * e;
-  character.rotation.z = 0.28 * e;
-  character.position.y = 0.12 * e;
-
-  if (next >= 1) {
-    character.traverse(o => {
-      if (o.material && 'emissiveIntensity' in o.material) o.material.emissiveIntensity = 0.03;
-    });
-  }
+  const inner = character.userData.rig?.inner ?? character;
+  inner.rotation.x = Math.PI / 2 * e;
+  inner.rotation.z = 0;
+  inner.scale.set(1, 1, 1);
+  inner.position.y = Math.sin(next * Math.PI) * 0.18 + 0.12 * e;
 }
 
-/**
- * Seam for real art.
- *
- * Drop a rigged GLB in and call this instead of makeCharacter(); it returns
- * the same { group, mixer } shape so scene.js needs no changes. Left
- * unimplemented on purpose rather than guessed at, because the rig's bone
- * names and animation clip names have to match the actual file.
- */
+/** Seam for real art: a rigged GLB can replace makeCharacter() later. */
 export async function loadCharacterGLB(url, { GLTFLoader }) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(url);

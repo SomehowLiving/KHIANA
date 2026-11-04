@@ -27,7 +27,8 @@ function api(path, init = {}) {
 
 const SPECTATOR = import.meta.env.VITE_SPECTATOR_URL ?? 'http://localhost:5174';
 
-import { mountMazeBackground } from './maze-bg.js';
+import { mountLineup } from './lineup.js';
+import { seatColor } from './character.js';
 
 const el = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
@@ -73,8 +74,9 @@ async function loadConfig() {
 // ── Lobbies ─────────────────────────────────────────────────────────────────
 
 function lobbyCard(r) {
-  const seats = Array.from({ length: r.capacity }, (_, i) =>
-    `<i class="${i < r.humans ? 'on' : ''}"></i>`).join('');
+  const seats = Array.from({ length: r.capacity }, (_, i) => i < r.humans
+    ? `<i class="on" style="background:#${seatColor(null, i).toString(16).padStart(6, '0')}"></i>`
+    : '<i></i>').join('');
 
   const status = r.winner ? 'finished'
     : r.started ? `<span class="live">live · tick ${r.tick}/${r.totalTicks}</span>`
@@ -204,9 +206,12 @@ if (!reduce) {
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
-// The labyrinth behind the page.
-const mazeCanvas = document.querySelector('canvas.maze');
-if (mazeCanvas) mountMazeBackground(mazeCanvas);
+// The cast on the hero podium. Colours are seat colours, never teams.
+const hero = el('herostage');
+if (hero) mountLineup(hero, {
+  cast: ['p1', 'p4', 'p5', 'p3', 'p6'].map(id => ({ id })),
+  camera: { zoom: 1.08, lookY: 0.55, fov: 30 },
+});
 
 loadConfig();
 loadLobbies();

@@ -1,9 +1,12 @@
 import { Scene } from './scene.js';
 import { payAndSign } from './wallet.js';
+import { mountLineup } from './lineup.js';
+import { seatColor, PLAYER_COLORS } from './character.js';
 import { unlock, sfx, speak, setPref, getPrefs, stopSpeaking, startAmbience, setTension, outputLevel, isUnlocked } from './audio.js';
 
 const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8787';
-const HTTP_URL = WS_URL.replace(/^ws/, 'http');
+const API = import.meta.env.VITE_API_URL ?? WS_URL.replace(/^ws/, 'http');
+const HTTP_URL = API;
 
 /**
  * Room + seat continuity.
@@ -52,10 +55,29 @@ function retainerText(v) {
   return RETAINER.find(([min]) => v >= min)[1];
 }
 
+// ── Join screen: your bean on a pedestal ───────────────────────────────────
+// Seat colour is assigned by the server, so the preview cycles through the
+// palette rather than pretending you can pick one. The antenna bulb tracks the
+// retainer: pink when the advisor is for sale, cyan when it is loyal.
+const gatePreview = mountLineup(el('gatestage'), { cast: [{ id: 'p1' }], spin: false, camera: { zoom: 1.0, lookY: 0.5, fov: 32 } });
+let gateColor = 0;
+const gateTimer = gatePreview && setInterval(() => {
+  gateColor = (gateColor + 1) % PLAYER_COLORS.length;
+  gatePreview.setColor(PLAYER_COLORS[gateColor]);
+}, 2400);
+// Blended in hue, not RGB: a straight RGB mix passes through a dull grey that
+// reads as the eliminated (dark) bulb. Every retainer value stays fully lit.
+function bulbFor(v) {
+  const t = (v - 20) / 75;            // 0 = for sale (pink), 1 = incorruptible (cyan)
+  return `hsl(${Math.round(330 - t * 145)}, 100%, 62%)`;
+}
+
 el('weight').addEventListener('input', e => {
   const v = Number(e.target.value);
   el('wv').textContent = `${v} / 100`;
   el('wd').textContent = retainerText(v);
+  gatePreview?.setBulb(bulbFor(v));
+  gatePreview?.pulse();
 });
 el('weight').dispatchEvent(new Event('input'));
 
@@ -97,6 +119,8 @@ el('join').addEventListener('click', async () => {
   }
   connect(name, Number(el('weight').value), paid);
   el('gate').style.display = 'none';
+  clearInterval(gateTimer);
+  gatePreview?.destroy();
 });
 
 // ── Networking ──────────────────────────────────────────────────────────────
@@ -128,7 +152,7 @@ function connect(name, weight, paid = null) {
       showLobby(msg.room ?? ROOM ?? 'MAIN');
       const r = el('role');
       r.className = 'stat ' + msg.team.toLowerCase();
-      r.querySelector('b').textContent = msg.team;
+      r.querySelector('b').textContent = msg.team === 'SABOTEUR' ? 'Saboteur' : 'Loyalist';
     }
     if (msg.type === 'STATE' && msg.view) render(msg.view);
     if (msg.type === 'ERROR') {
@@ -172,10 +196,15 @@ function cueAudio(view) {
   const humans = (view.roster ?? []).filter(p => p.name && !/^Player \d+$/.test(p.name)).length;
   if (lastSeen.humans !== null && humans > lastSeen.humans) sfx.join();
 
-  if (lastSeen.tick !== null && view.tick !== lastSeen.tick) sfx.tick();
+  if (lastSeen.tick !== null && view.tick !== lastSeen.tick) {
+    sfx.tick();
+    scene.pulseAdvisors();   // every advisor briefs on the tick
+  }
 
   if (view.briefing && view.briefing !== lastSeen.briefing) {
     sfx.briefing();
+    const b = el('briefing');
+    b.classList.remove('ping'); void b.offsetWidth; b.classList.add('ping');
     // The advisor speaks. This is the game's primary channel: the player is
     // looking at a wall, so the instruction has to arrive through their ears.
     speak(view.briefing, { corrupted: false });
@@ -330,6 +359,9 @@ function render(view) {
       : `sealed (${view.exit.x},${view.exit.y})`;
   }
 
+  renderSeats(view.roster ?? []);
+  if (view.phase === 'REVEAL') showReveal();
+
   // Lobby closes itself the moment the server says the game is running.
   if (view.started && !started) {
     started = true;
@@ -357,7 +389,7 @@ function render(view) {
       comp.hidden = false;
       const rel = view.guide.bearing - yaw;
       el('needle').style.transform = `rotate(${rel}rad)`;
-      el('compassdist').textContent = `${view.guide.distance}`;
+      el('compassdist').textContent = `${view.guide.distance} tiles`;
     } else {
       comp.hidden = true;
     }
@@ -381,11 +413,81 @@ function render(view) {
   // player whose allegiance you have not earned, so the only two numbers on
   // this panel are the ones you are meant to reason about: who is still alive,
   // and how corruptible each advisor publicly is.
-  el('rosterlist').innerHTML = (view.roster ?? []).map(p => `
+  el('rosterlist').innerHTML = (view.roster ?? []).map((p, i) => `
     <div class="r ${p.team === 'SABOTEUR' ? 'sab' : ''} ${p.alive ? '' : 'dead'}">
-      <span class="n">${escapeHtml(p.name)}</span>
+      <span class="dot" style="background:${hex(seatColor(p.id, i))}"></span>
+      <span class="n">${escapeHtml(p.name)}${p.id === me ? ' (you)' : ''}</span>
       <span class="w">${p.agentGoal}</span>
     </div>`).join('');
+}
+
+const hex = n => '#' + n.toString(16).padStart(6, '0');
+const isHuman = p => p.name && !/^Player \d+$/.test(p.name);
+
+/** Lobby seat bar: one bean slot per seat, filled in that seat's colour. */
+function renderSeats(roster) {
+  const box = el('lseats');
+  if (!box || el('lobby').hidden) return;
+  const humans = roster.filter(isHuman);
+  const total = roster.length || 8;
+  box.innerHTML = Array.from({ length: total }, (_, i) => {
+    const p = humans[i];
+    return p ? `<i class="on" style="background:${hex(seatColor(p.id, i))}" title="${escapeHtml(p.name)}"></i>` : '<i></i>';
+  }).join('');
+  el('lseatlbl').textContent = `${humans.length} of ${total} seats taken by people. Bots take the rest.`;
+}
+
+/**
+ * The verdict. Once the server enters REVEAL the whole ledger is public, so
+ * the screen fetches it and shows who was who. Only called in REVEAL: the
+ * endpoint finishes the round if no reveal exists yet.
+ */
+let revealShown = false;
+let overStage = null;
+async function showReveal() {
+  if (revealShown) return;
+  revealShown = true;
+  let data;
+  try {
+    const q = ROOM ? `?room=${encodeURIComponent(ROOM)}` : '';
+    data = await fetch(`${API}/game/reveal${q}`, { headers: { 'ngrok-skip-browser-warning': '1' } }).then(r => r.json());
+  } catch {
+    revealShown = false;   // try again on the next frame
+    return;
+  }
+  const agents = Object.entries(data.perAgent ?? {});
+  const win = data.winner;
+  const t = el('overtitle');
+  t.textContent = win === 'SABOTEUR' ? 'Saboteurs win!' : win === 'LOYALIST' ? 'Loyalists win!' : 'Round over';
+  t.className = 'title ' + (win === 'SABOTEUR' ? 'sab' : 'loy');
+  const myTeam = data.perAgent?.[me]?.team;
+  el('oversub').textContent = myTeam
+    ? (myTeam === win ? 'Your team took it.' : 'Your team lost this one.') + ' The ledger is open.'
+    : 'The ledger is open.';
+
+  el('overtotals').innerHTML = `
+    <span><b>${data.totalBribed ?? 0}</b> KHIA in bribes</span>
+    <span><b>${data.betrayals ?? 0}</b> bribes followed</span>
+    <span><b>${data.totalBurned ?? 0}</b> KHIA burned on powerups</span>`;
+
+  el('overlist').innerHTML = agents.map(([id, a], i) => {
+    const sab = a.team === 'SABOTEUR';
+    const took = (a.received ?? []).length;
+    const paid = (a.paid ?? []).length;
+    return `<div class="res ${a.alive ? '' : 'out'} ${id === me ? 'you' : ''}" style="animation-delay:${i * 60}ms">
+      <span class="dot" style="background:${hex(seatColor(id, i))}"></span>
+      <span class="nm">${escapeHtml(a.player)}${id === me ? ' (you)' : ''}</span>
+      <span class="tm ${sab ? 'sab' : 'loy'}">${sab ? 'Saboteur' : 'Loyalist'}</span>
+      <span class="meta">${a.alive ? 'Survived' : 'Eliminated'} · ${a.finalBalance} KHIA · took ${took} bribe${took === 1 ? '' : 's'}, paid ${paid}</span>
+    </div>`;
+  }).join('');
+
+  el('over').hidden = false;
+  stopSpeaking();
+  overStage = mountLineup(el('overstage'), {
+    cast: agents.map(([id, a]) => ({ id, team: a.team, alive: a.alive, winner: a.alive && a.team === win })),
+    camera: { zoom: 1.05, lookY: 0.2, fov: 28, minH: 2.6 },
+  });
 }
 
 function escapeHtml(s) {

@@ -14,8 +14,8 @@
  */
 
 const COLORS = {
-  wall: 'rgba(110, 84, 255, 0.55)',   // Monad purple
-  lit: 'rgba(133, 230, 255, 0.9)',   // Monad cyan, for the torch-lit run
+  wall: 'rgba(0, 229, 255, 0.28)',    // electric cyan, faint
+  lit: 'rgba(163, 255, 60, 0.9)',    // lime, for the torch-lit run
 };
 
 /** Recursive backtracker on a (2n+1) grid. 1 = wall, 0 = corridor. */
@@ -123,8 +123,8 @@ export function mountMazeBackground(canvas) {
       torch.x * w * dpr, torch.y * h * dpr, Math.max(w, h) * 0.42 * dpr
     );
     g.addColorStop(0, COLORS.lit);
-    g.addColorStop(0.55, 'rgba(133,230,255,0.10)');
-    g.addColorStop(1, 'rgba(133,230,255,0)');
+    g.addColorStop(0.55, 'rgba(163,255,60,0.10)');
+    g.addColorStop(1, 'rgba(163,255,60,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.restore();

@@ -1,6 +1,7 @@
 import { CONFIG, TEAM, rulesFor } from '../config.js';
 import { distance, isWalkable } from './maze.js';
 import { bearingTo, tileDistance } from './directions.js';
+import { gameClock, flashlightState } from './flashlight.js';
 
 /**
  * SECURITY-CRITICAL MODULE.
@@ -72,9 +73,16 @@ export function corridorSightFor(player, effects) {
  * floor of the passage lights up between two black voids, which reads as a
  * bridge over a chasm rather than a hallway.
  */
-export function computeVisible(maze, player, effects) {
-  const radius = visionRadiusFor(player, effects);
-  const reach = corridorSightFor(player, effects);
+export function computeVisible(maze, player, effects, light = null) {
+  // `light` is only passed for the player's own view. Night shrinks the
+  // bubble and every corridor ray; a lit flashlight restores one ray, the one
+  // the player is facing, and lantern/blackout still scale it.
+  const night = Boolean(light?.night);
+  const radius = night ? Math.min(visionRadiusFor(player, effects), CONFIG.DAY.NIGHT_VISION_RADIUS) : visionRadiusFor(player, effects);
+  const dayReach = corridorSightFor(player, effects);
+  const beamReach = Math.round(dayReach * CONFIG.DAY.FLASHLIGHT_REACH / CONFIG.GAME.CORRIDOR_SIGHT);
+  const reachFor = dirIndex => !night ? dayReach
+    : (light.beamDir === dirIndex ? beamReach : Math.min(dayReach, CONFIG.DAY.NIGHT_CORRIDOR_SIGHT));
   const n = maze.tiles.length;
   const visible = new Set([`${player.pos.x},${player.pos.y}`]);
 
@@ -92,8 +100,9 @@ export function computeVisible(maze, player, effects) {
   }
 
   // ── Corridor rays ─────────────────────────────────────────────────────────
-  const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-  for (const [dx, dy] of DIRS) {
+  const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];   // N E S W, same order as player.facing
+  for (const [d, [dx, dy]] of DIRS.entries()) {
+    const reach = reachFor(d);
     for (let i = 1; i <= reach; i++) {
       const x = player.pos.x + dx * i, y = player.pos.y + dy * i;
       if (!inBounds(x, y)) break;
@@ -157,11 +166,16 @@ function stalkStateFor(state, me) {
   };
 }
 
-export function playerView(state, playerId) {
+export function playerView(state, playerId, now = Date.now()) {
   const me = state.players[playerId];
   if (!me) return null;
 
-  const visible = computeVisible(state.maze, me, state.effects);
+  const clock = gameClock(state, now);
+  const torch = flashlightState(state, me, now);
+  const visible = computeVisible(state.maze, me, state.effects, {
+    night: clock.phase === 'NIGHT',
+    beamDir: torch.on ? (me.facing ?? 0) : null,
+  });
 
   /**
    * Teams are HIDDEN from players.
@@ -249,6 +263,9 @@ export function playerView(state, playerId) {
      * is fatal for a game whose whole tension depends on knowing the stakes.
      */
     objective: objectiveFor(state, me),
+    // Same snapshot for everyone in the room, so dusk lands for all at once.
+    clock,
+    flashlight: torch,
     started: Boolean(state.started),
     // NOTE: agent channel is deliberately absent. Players never see it.
   };
@@ -278,8 +295,9 @@ function objectiveFor(state, me) {
 }
 
 /** Spectators see everything. This is the demo view. */
-export function spectatorView(state) {
+export function spectatorView(state, now = Date.now()) {
   return {
+    clock: gameClock(state, now),
     maze: state.maze.tiles,
     players: Object.values(state.players).map(p => ({
       id: p.id, name: p.name, team: p.team, pos: p.pos, alive: p.alive,

@@ -112,6 +112,24 @@ export const CONFIG = {
     TIMEOUT_TASKS_FOR_LOYALIST_WIN: 3,
   },
 
+  /**
+   * Day/night. The clock is server time from game start; see game/clock.js.
+   * Night affects only what each player SEES (playerView). Elimination and
+   * witness rules deliberately keep daytime sight, so night changes how the
+   * game feels without rebalancing who can kill whom.
+   */
+  DAY: {
+    CYCLE_MS: Number(process.env.DAY_CYCLE_MS ?? 240_000),     // one full day; 10-min game ≈ 2.5 days
+    START_HOUR: Number(process.env.DAY_START_HOUR ?? 10),      // dusk 80s after start at the default cycle
+    NIGHT_VISION_RADIUS: Number(process.env.NIGHT_VISION_RADIUS ?? 1),
+    NIGHT_CORRIDOR_SIGHT: Number(process.env.NIGHT_CORRIDOR_SIGHT ?? 1),
+    FLASHLIGHT_REACH: Number(process.env.FLASHLIGHT_REACH ?? 6),
+    BATTERY_MAX: 100,
+    BATTERY_DRAIN_PER_S: Number(process.env.BATTERY_DRAIN_PER_S ?? 100 / 60),     // a full charge lasts a minute
+    BATTERY_RECHARGE_PER_S: Number(process.env.BATTERY_RECHARGE_PER_S ?? 100 / 90),
+    BATTERY_MIN_TO_START: 10,
+  },
+
   ECONOMY: {
     STARTING_MON: 5.0,
     CONTACT_FEE: 0.25,          // paid TO the recipient, not burned

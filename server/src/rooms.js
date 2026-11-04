@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { CONFIG, TABLE_SIZES } from './config.js';
 import { createGame, runTick, resolveTick, movePlayer, endGame } from './game/engine.js';
 import { playerView, spectatorView } from './game/fog.js';
+import { gameClock, flashlightState } from './game/flashlight.js';
 import { stepAllBots, claimSeat, releaseSeat, firstOpenSeat } from './agents/bots.js';
 import { commitRoles } from './economy/roles.js';
 import { stakeAgents } from './economy/stakes.js';
@@ -423,6 +424,7 @@ export async function startRoom(room) {
     // would prove nothing (PRD §10.4).
     const commit = await commitRoles(game).catch(() => null);
     game.started = true;
+    game.clockStartedAt = Date.now();   // the day/night clock runs from here
 
     if (process.env.RECORD === 'true' && !isRecording()) {
       room.recordingFile = startRecording({ seed: game.seed, room: room.code });
@@ -559,6 +561,28 @@ export function tickAutoStart(now = Date.now()) {
 
 export function startAutoStarter(intervalMs = 3_000) {
   const t = setInterval(() => tickAutoStart(), intervalMs);
+  t.unref?.();
+  return t;
+}
+
+/**
+ * Day/night watcher. State is otherwise pushed on ticks and moves; dusk, dawn
+ * and a flashlight running flat happen between them, and each changes what a
+ * player can see, so the room is re-sent the moment any of them flips.
+ */
+export function tickClocks(now = Date.now()) {
+  for (const room of rooms.values()) {
+    const g = room.game;
+    if (!g.started || g.winner) continue;
+    const sig = gameClock(g, now).phase + Object.values(g.players)
+      .map(p => (flashlightState(g, p, now).on ? 1 : 0)).join('');
+    if (room.lightSig !== undefined && sig !== room.lightSig) broadcast(room);
+    room.lightSig = sig;
+  }
+}
+
+export function startClockWatch(intervalMs = 1_000) {
+  const t = setInterval(() => tickClocks(), intervalMs);
   t.unref?.();
   return t;
 }

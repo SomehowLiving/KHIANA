@@ -1,4 +1,6 @@
 import express from 'express';
+import { mountTts } from './tts.js';
+import { setFlashlight } from './game/flashlight.js';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
@@ -12,12 +14,13 @@ import { providerStatus } from './agents/llm.js';
 import {
   createRoom, getRoom, publicRooms, roomSummary, allRooms,
   attach, detach, seatPlayer, pushState, broadcast, movePlayerIn,
-  startRoom, finishRoom, resetRoom, closeRoom, startReaper, startAutoStarter, isHost, canStart, humanCount,
+  startRoom, finishRoom, resetRoom, closeRoom, startReaper, startAutoStarter, startClockWatch, isHost, canStart, humanCount,
 } from './rooms.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+mountTts(app);
 
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http });
@@ -39,6 +42,7 @@ const defaultRoom = createRoom({
 
 startReaper();
 startAutoStarter();
+startClockWatch();
 
 /** Resolve :code / ?room= / body.room, falling back to the main table. */
 function resolveRoom(req) {
@@ -401,6 +405,22 @@ wss.on('connection', (ws, req) => {
       case 'FACE': {
         const p = room.game.players[meta?.playerId];
         if (p && Number.isInteger(msg.facing)) p.facing = ((msg.facing % 4) + 4) % 4;
+        // The flashlight beam follows facing, so a lit player's view changes.
+        if (p?.flashlight?.on) pushState(room, ws);
+        break;
+      }
+
+      /**
+       * Flashlight toggle. The server decides (night, alive, charged) and
+       * answers with the reason, so the client can tell a rule from a fault.
+       * Spectators hold no seat and are refused inside setFlashlight.
+       */
+      case 'FLASHLIGHT': {
+        const p = room.game.players[meta?.playerId];
+        if (p && Number.isInteger(msg.facing)) p.facing = ((msg.facing % 4) + 4) % 4;
+        const r = setFlashlight(room.game, meta?.playerId, Boolean(msg.on));
+        send(ws, { type: 'FLASHLIGHT', ...r, on: Boolean(msg.on) });
+        pushState(room, ws);
         break;
       }
         break;

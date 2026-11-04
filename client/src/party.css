@@ -1,0 +1,150 @@
+/* Khiana party world: shared by the landing page and the game.
+   Toy materials: navy outline on everything, a darker lip under anything
+   pressable, candy fills, and a fat rounded display face. */
+
+:root {
+  --ink: #1B1F4B;
+  --ink-soft: #464C86;
+  --sky: #4FC3FF;
+  --sky-deep: #1668B8;
+  --sky-hi: #A8E3FF;
+  --sun: #FFD23F;
+  --sun-lip: #D99A00;
+  --pink: #FF5FA8;
+  --pink-lip: #C42E78;
+  --lime: #7BD94B;
+  --lime-lip: #3E9A1C;
+  --orange: #FF8A3D;
+  --grape: #9B6BFF;
+  --cream: #FFF7E6;
+
+  --display: 'Lilita One', 'Nunito', system-ui, sans-serif;
+  --body: 'Nunito', system-ui, -apple-system, sans-serif;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+  --spring: cubic-bezier(.34, 1.56, .64, 1);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--body);
+  font-weight: 700;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--sun); color: var(--ink); }
+:focus-visible { outline: 4px solid var(--sun); outline-offset: 3px; border-radius: 12px; }
+
+h1, h2, h3, .title { font-family: var(--display); font-weight: 400; line-height: 1.02; letter-spacing: .005em; margin: 0; }
+
+/* Big display type: white fill, navy stroke, navy drop. */
+.title {
+  color: #fff;
+  -webkit-text-stroke: 6px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 6px 0 var(--ink);
+  text-wrap: balance;
+}
+
+/* ── Sky with drifting dots ───────────────────────────────────────────── */
+.party-sky {
+  background:
+    radial-gradient(120% 80% at 50% 0%, var(--sky-hi) 0%, rgba(168,227,255,0) 60%),
+    linear-gradient(180deg, #5CCBFF 0%, var(--sky) 45%, #2FA6F0 100%);
+  isolation: isolate;
+}
+.party-sky::before {
+  /* Fixed, so the oversize layer never adds scroll to a scrolling screen. */
+  content: ""; position: fixed; inset: -80px; z-index: -1; pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,.28) 9px, transparent 10px);
+  background-size: 64px 64px;
+  animation: drift 14s linear infinite;
+}
+@keyframes drift { to { transform: translate(64px, 64px); } }
+
+/* Soft clouds, drifting slowly across the dot field. */
+.party-sky::after {
+  content: ""; position: fixed; top: 0; left: 0; width: 200vw; height: 60vh; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60px 34px at 8% 22%, rgba(255,255,255,.9) 98%, transparent),
+    radial-gradient(44px 30px at 11% 18%, rgba(255,255,255,.9) 98%, transparent),
+    radial-gradient(80px 40px at 34% 46%, rgba(255,255,255,.75) 98%, transparent),
+    radial-gradient(54px 34px at 37% 41%, rgba(255,255,255,.75) 98%, transparent),
+    radial-gradient(70px 36px at 63% 14%, rgba(255,255,255,.85) 98%, transparent),
+    radial-gradient(46px 30px at 66% 10%, rgba(255,255,255,.85) 98%, transparent),
+    radial-gradient(64px 34px at 86% 36%, rgba(255,255,255,.7) 98%, transparent),
+    radial-gradient(42px 28px at 88.5% 32%, rgba(255,255,255,.7) 98%, transparent);
+  animation: clouds 90s linear infinite;
+}
+@keyframes clouds { from { transform: translateX(0); } to { transform: translateX(-100vw); } }
+
+/* ── Panels ───────────────────────────────────────────────────────────── */
+.card {
+  background: var(--cream);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 8px 0 var(--ink), 0 18px 30px rgba(27,31,75,.28);
+}
+
+/* ── Buttons: toys you press down into their lip ──────────────────────── */
+.btn {
+  --face: #fff; --lip: #B9C2E6; --fg: var(--ink);
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--display); font-weight: 400; font-size: 20px; letter-spacing: .01em;
+  line-height: 1; white-space: nowrap; text-decoration: none; cursor: pointer;
+  color: var(--fg); background: var(--face);
+  border: 3.5px solid var(--ink); border-radius: 18px;
+  padding: 14px 26px 15px;
+  box-shadow: inset 0 -5px 0 var(--lip), 0 5px 0 var(--ink), 0 10px 16px rgba(27,31,75,.25);
+  transition: transform .14s var(--ease), box-shadow .14s var(--ease), filter .2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.05); box-shadow: inset 0 -5px 0 var(--lip), 0 7px 0 var(--ink), 0 14px 20px rgba(27,31,75,.25); }
+.btn:active:not(:disabled) { transform: translateY(5px); box-shadow: inset 0 -2px 0 var(--lip), 0 0 0 var(--ink), 0 3px 6px rgba(27,31,75,.25); }
+.btn:disabled { cursor: default; filter: saturate(.4); opacity: .75; }
+.btn-primary { --face: var(--sun); --lip: var(--sun-lip); }
+.btn-pink { --face: var(--pink); --lip: var(--pink-lip); }   /* navy label: white on pink is 2.6:1 */
+.btn-lime { --face: var(--lime); --lip: var(--lime-lip); }
+.btn-ghost { --face: #fff; --lip: #C7CEEA; }
+.btn-primary, .btn-pink, .btn-lime { text-shadow: 0 2px 0 rgba(27,31,75,.18); }
+
+/* ── Inputs ───────────────────────────────────────────────────────────── */
+input[type=text] {
+  width: 100%; font-family: var(--body); font-weight: 800; font-size: 17px; color: var(--ink);
+  background: #fff; border: 3.5px solid var(--ink); border-radius: 16px;
+  padding: 12px 15px; box-shadow: inset 0 4px 0 rgba(27,31,75,.08);
+  caret-color: var(--pink-lip);
+}
+input[type=text]::placeholder { color: #6B71A3; opacity: 1; font-weight: 700; }
+input[type=text]:focus-visible { outline: 4px solid var(--sun); outline-offset: 1px; }
+
+input[type=range] {
+  -webkit-appearance: none; appearance: none; height: 22px; background: transparent; cursor: pointer;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 16px; border-radius: 999px; border: 3px solid var(--ink);
+  background: linear-gradient(90deg, var(--pink) 0%, var(--sun) 50%, var(--lime) 100%);
+}
+input[type=range]::-moz-range-track {
+  height: 10px; border-radius: 999px; border: 3px solid var(--ink);
+  background: linear-gradient(90deg, var(--pink) 0%, var(--sun) 50%, var(--lime) 100%);
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 32px; height: 32px; margin-top: -11px; border-radius: 50%;
+  background: #fff; border: 3.5px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+}
+input[type=range]::-moz-range-thumb {
+  width: 26px; height: 26px; border-radius: 50%; background: #fff; border: 3.5px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+}
+
+::-webkit-scrollbar { width: 12px; }
+::-webkit-scrollbar-track { background: var(--sky-deep); }
+::-webkit-scrollbar-thumb { background: var(--sun); border: 3px solid var(--ink); border-radius: 999px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .party-sky::before, .party-sky::after { animation: none; }
+  .btn { transition: none; }
+}
