@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/khiana-logo.png" alt="Khiana" width="200" />
+<img src="assets/logo-readme.png" alt="Khiana mascot: a round black creature with yellow eyes, leaping toward a glowing ring" width="240" />
 
 # KHIANA
 
@@ -25,15 +25,25 @@
 
 ---
 
-## The two screens
+## Screenshots
 
-<img src="assets/Game_Human_view.png" alt="Player view: a dark first-person corridor, roster with no team colours, and the advisor's instruction along the bottom" width="100%" />
+Live at **[khiana-spectator.vercel.app](https://khiana-spectator.vercel.app)**.
 
-**What a player sees.** One torch-lit corridor, a roster that shows loyalty numbers but never who the saboteurs are, and an advisor telling them exactly where to walk.
+<img src="assets/screenshot-landing.jpg" alt="Landing page: the Khiana title, five robot characters on a pedestal, and an advisor speech bubble saying 'Take the left fork. Nobody has been down there.'" width="100%" />
 
-<img src="assets/Spectator_View.png" alt="Spectator view: the full maze with every player named, and the advisor channel showing a 1 KHIA bribe" width="100%" />
+**Landing and lobbies.** Open a table (4 or 8 seats, free or paid in MON) or join one by code.
 
-**What the audience sees.** The whole maze, every player named and colour-coded by team, and the advisor channel on the right. In this frame p2 is paying p7 1 KHIA with the words "A little cooperation now, might save us later", one of 16 betrayals that round.
+<img src="assets/screenshot-join.jpg" alt="Join screen: a green robot on a turning pedestal next to a card for your name and your advisor's retainer, set to 70 of 100" width="100%" />
+
+**Pick your advisor's loyalty.** The retainer sets how hard your advisor is to bribe, and everyone can see it. At a paid table this is also where you connect a wallet and pay to enter.
+
+<img src="assets/screenshot-game.jpg" alt="In game: a first-person corridor, a HUD showing Saboteur, tick 4 of 40 and tasks 1 of 5, the player list with loyalty scores, and the advisor saying 'Turn left and step forward three times.'" width="100%" />
+
+**What a player sees.** One corridor in first person. Your team, the tick, the tasks, and the objective across the top; every player's loyalty on the right, but never their team; and your advisor's directions at the bottom, which you can't check.
+
+<img src="assets/screenshot-spectator.jpg" alt="Spectator view: the whole maze from above with every player marked, and the advisor channel listing each advisor's directions tick by tick" width="100%" />
+
+**What the audience sees** at [`/spectate/`](https://khiana-spectator.vercel.app/spectate/). The whole maze, every player, and the advisor channel: every message and bribe between advisors, which players never see.
 
 ---
 
