@@ -1,0 +1,17 @@
+{
+  "name": "khiana-client",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Player view — 3D isometric maze with fog of war",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

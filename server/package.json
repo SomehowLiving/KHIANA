@@ -1,0 +1,32 @@
+{
+  "name": "khiana-server",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Authoritative game server: tick engine, fog of war, agents, settlement",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "headless": "node src/headless.js",
+    "test": "node game.test.mjs && node integration.test.mjs",
+    "wallets": "node scripts/wallets.mjs",
+    "wallets:new": "node scripts/wallets.mjs --new",
+    "fund": "node scripts/fund.mjs",
+    "distribute": "node scripts/distribute.mjs",
+    "x402": "node scripts/x402.mjs",
+    "phase1": "node scripts/phase1.mjs",
+    "phase1:local": "node scripts/phase1-local.mjs",
+    "playback": "node src/playback.js",
+    "game:onchain": "node scripts/onchain-game.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "viem": "^2.21.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

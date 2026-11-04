@@ -1,0 +1,58 @@
+# ── Secrets ─────────────────────────────────────────────────────────────────
+# .env holds AGENT_MNEMONIC and GROQ_API_KEY. Never commit it.
+# Committed .env.example documents every variable with no values.
+.env
+.env.local
+.env.*.local
+
+# ── Dependencies & build output ─────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# ── Solidity build artifacts ────────────────────────────────────────────────
+artifacts/
+cache/
+typechain/
+typechain-types/
+
+# Written by contracts/scripts/deploy.js. Ignored because a local dry-run
+# deploy overwrites it with chainId 31337 addresses, and that churn is not
+# worth committing. Real testnet addresses belong in .env.
+contracts/deployments.json
+
+# ── Runtime output ──────────────────────────────────────────────────────────
+# Recorded runs (demo parachute). Large, per-run, regenerable.
+server/recordings/
+*.log
+logs/
+coverage/
+.nyc_output/
+
+# ── Internal docs & planning ────────────────────────────────────────────────
+# Excluded at the owner's request: PRD, build phases, demo script and the
+# powerup catalogue are working documents, not part of the shipped product.
+# NOTE: this also removes the only written explanation of WHY the design is
+# the way it is (the Monad justifications, the economy invariants). If this
+# repo is ever handed to someone else, un-ignore docs/ first.
+docs/
+
+# ── Agent & editor tooling ──────────────────────────────────────────────────
+# Local assistant configuration and installed skill packs. Machine-specific
+# and large; not part of the game.
+.claude/
+.cursor/
+.agents/
+.impeccable/
+.remember/
+.monskills
+skills-lock.json
+.vscode/
+.idea/
+
+# ── OS noise ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,12 @@
+{
+  "name": "khiana-spectator",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Spectator view — the demo screen. Full map, live agent channel, ledger reveal.",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": { "vite": "^5.4.0" }
+}

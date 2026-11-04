@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Khiana · your advisor is lying to you</title>
+<meta name="description" content="A maze you can barely see. An AI advisor who can see everything. It may have been paid to walk you into a wall." />
+
+<link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+<!-- Cabinet Grotesk (display) + Satoshi (body), both from Fontshare. A heavy
+     geometric grotesk is what makes Neo-Brutalism read as confident rather
+     than merely loud, and neither font is on Google Fonts. -->
+<link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,700,500&f[]=satoshi@500,700,900&display=swap" rel="stylesheet">
+
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#EEF3FC">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   KHIANA - Neo-Brutalist landing
+
+   Neo-Brutalist geometry on a light blue and purple palette. Single light
+   theme throughout: section-to-section colour blocking is depth, not a theme
+   flip, and no section inverts to dark.
+
+   Shape rule, applied everywhere with no exceptions: bordered boxes (cards,
+   buttons, inputs, pills) are 12px. Full-bleed structural sections are 0.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Monad brand palette (monad.xyz brand kit). The Neo-Brutalist GEOMETRY is
+     kept (2px strokes, zero-blur offset shadows, hard colour blocking) but the
+     substrate is Monad's dark navy rather than yellow, so the landing page,
+     the game and the spectator screen finally read as one product.
+
+     Offset shadows are purple. On the earlier dark substrate a black shadow
+     was invisible; on this light one purple keeps the offset legible without
+     the harsh black-on-white contrast that made the page tiring to read. */
+  --ink:     #EEF3FC;   /* page substrate, light blue tint */
+  --panel:   #FFFFFF;   /* raised surface */
+  --fog:     #DFE9FB;   /* recessed surface */
+  --purple:  #6B4EF0;   /* accent, carried over from Monad */
+  /* Blue accent. Measured against all three surfaces, not just white: at
+     #1F6FB2 it scored 4.32 on --fog, under AA. This clears every one of them
+     (5.47 on fog, 6.69 on white, 6.01 on ink) and still reads blue. */
+  --cyan:    #1A5F99;
+  --lav:     #1C1938;   /* text, near-black with a violet cast */
+  --pink:    #C2185B;
+  --orange:  #B26A00;
+
+  /* Role aliases so the rest of the sheet reads by intent, not by hue. */
+  --yellow:  var(--purple);   /* primary blocked section */
+  --char:    var(--ink);      /* light blocked section */
+  --sage:    var(--fog);      /* tertiary blocked section */
+  --white:   var(--panel);    /* card surface */
+  --black:   var(--lav);      /* strokes and display type */
+  --paper:   var(--fog);
+  --grey:    var(--panel);
+  --stroke:  var(--purple);
+
+  --display: 'Cabinet Grotesk', 'Satoshi', system-ui, sans-serif;
+  --body:    'Satoshi', system-ui, -apple-system, sans-serif;
+
+  --bd:      2px solid var(--stroke);
+  --sh:      4px 4px 0 0 var(--purple);
+  --sh-lg:   8px 8px 0 0 var(--purple);
+  --r:       12px;
+
+  --nav-h:   72px;
+  /* ease-out-quint. The spec's cubic-bezier(.175,.885,.32,1.275) overshoots
+     past its target and springs back, which on a button that is supposed to be
+     pressed INTO its own shadow reads as bouncy rather than mechanical. Real
+     objects decelerate; they do not rebound past the stop. */
+  --ease:    cubic-bezier(.16, 1, .3, 1);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--lav);
+  font-family: var(--body);
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  margin: 0;
+}
+
+a { color: inherit; }
+
+.wrap { width: min(92vw, 1200px); margin: 0 auto; }
+
+/* Section rhythm. Colour blocking carries the transitions, so each block gets
+   a hard 2px rule top and bottom rather than a gradient or a soft fade. */
+section { padding: clamp(64px, 9vw, 116px) 0; border-bottom: var(--bd); }
+/* Four substrates, all inside one dark theme. The page never flips to a light
+   section: colour blocking here is depth, not a theme switch. */
+.s-yellow { background: var(--purple); color: #FFFFFF; }
+.s-char   { background: var(--ink);   color: var(--lav); }
+.s-sage   { background: var(--fog);   color: var(--lav); }
+.s-white  { background: var(--panel); color: var(--lav); }
+.s-yellow .eyebrow { background: #FFFFFF; color: var(--purple); border-color: #FFFFFF; }
+
+/* 32px radial dot texture. Only on yellow, per the brand rule, and behind
+   content so it never competes with type. */
+.dots { position: relative; }
+.dots::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(var(--purple) 1.5px, transparent 1.5px);
+  background-size: 32px 32px;
+  opacity: .16;
+}
+.dots > * { position: relative; }
+
+.eyebrow {
+  display: inline-block;
+  font-family: var(--body); font-weight: 700;
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  background: var(--panel); color: var(--cyan);
+  border: var(--bd); border-radius: 999px;
+  padding: 7px 15px; margin-bottom: 22px;
+}
+
+.lede { font-size: clamp(16px, 1.6vw, 19px); max-width: 54ch; margin: 20px 0 0; }
+.sub  { font-size: 16px; max-width: 62ch; margin: 16px 0 0; opacity: .82; }
+
+/* ── Buttons: the physical press ────────────────────────────────────────────
+   Hover moves the element into the space its own shadow occupied, so the
+   shadow shrinks by exactly the distance travelled. Any other pairing and it
+   reads as drifting rather than depressing. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  white-space: nowrap;
+  font-family: var(--body); font-weight: 700; font-size: 15px;
+  letter-spacing: -0.01em;
+  padding: 14px 26px;
+  border: var(--bd); border-radius: var(--r);
+  cursor: pointer; text-decoration: none;
+  transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+}
+/* Cyan on ink is 13.1:1; ink on cyan is the same pair inverted. Both clear AA
+   comfortably, which purple-on-ink (3.4:1) would not for body-sized labels. */
+.btn-primary { background: var(--cyan);  color: #FFFFFF; border-color: var(--cyan); box-shadow: var(--sh-lg); }
+.btn-ghost   { background: transparent;  color: var(--lav); box-shadow: var(--sh); }
+.btn-primary:hover { transform: translate(4px, 4px); box-shadow: var(--sh); }
+.btn-ghost:hover   { transform: translate(2px, 2px); box-shadow: 2px 2px 0 0 var(--purple); background: var(--panel); }
+.btn:active        { transform: translate(4px, 4px); box-shadow: none; }
+.btn:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+
+/* ── Navigation: one line, 72px ─────────────────────────────────────────── */
+nav {
+  position: sticky; top: 0; z-index: 50;
+  height: var(--nav-h);
+  background: var(--ink);
+  border-bottom: var(--bd);
+  display: flex; align-items: center;
+}
+nav .wrap { display: flex; align-items: center; gap: 28px; width: min(94vw, 1280px); }
+.brand { display: flex; align-items: center; gap: 11px; text-decoration: none; margin-right: auto; }
+.brand img { display: block; height: 34px; width: auto; }
+.brand b { font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -.04em; }
+.navlinks { display: flex; align-items: center; gap: 26px; }
+.navlinks a {
+  font-weight: 700; font-size: 14px; text-decoration: none;
+  border-bottom: 2px solid transparent; padding-bottom: 2px;
+}
+.navlinks a:hover { border-bottom-color: var(--cyan); color: var(--cyan); }
+nav .btn { padding: 10px 18px; font-size: 14px; }
+@media (max-width: 860px) { .navlinks { display: none; } }
+
+/* ── Hero: asymmetric split ─────────────────────────────────────────────── */
+header { background: var(--ink); border-bottom: var(--bd); }
+/* Column split and headline size are chosen TOGETHER, not independently. The
+   headline is two authored lines and must render as exactly two: at 1.15fr and
+   92px it wrapped to four, pushing the CTAs 42px below the fold on a 720px
+   viewport. 1.3fr at 58px is the widest pairing that still holds two lines. */
+.hero {
+  display: grid; grid-template-columns: 1.3fr .7fr;
+  gap: clamp(28px, 4vw, 56px); align-items: center;
+  padding: clamp(32px, 4vw, 52px) 0 clamp(36px, 4.5vw, 60px);
+}
+.hero h1 { font-size: clamp(34px, 3.9vw, 58px); }
+/* Outlined keyword. -webkit-text-stroke is the only cross-browser way to get a
+   true hairline-outline glyph; the fallback colour matters because Firefox
+   honours the stroke but some older engines ignore it entirely. */
+.hollow {
+  color: transparent;
+  -webkit-text-stroke: 2px var(--cyan);
+  paint-order: stroke fill;
+}
+.cta-row { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; }
+
+.viz {
+  background: var(--panel); border: var(--bd); border-radius: var(--r);
+  box-shadow: var(--sh-lg);
+  padding: 26px; text-align: center;
+}
+.viz img { display: block; width: 100%; max-width: 210px; height: auto; margin: 0 auto 16px; }
+.whisper {
+  border-top: var(--bd); padding-top: 16px; text-align: left;
+  font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+}
+.whisper b {
+  display: block; margin-top: 8px;
+  font-family: var(--display); font-weight: 700; font-size: 17px;
+  letter-spacing: -.02em; text-transform: none;
+  background: var(--fog); color: var(--cyan); border: var(--bd); border-radius: var(--r);
+  padding: 11px 14px; min-height: 62px;
+}
+@media (max-width: 900px) {
+  .hero { grid-template-columns: 1fr; }
+  .viz { order: -1; }
+}
+
+/* ── Two teams: split cards ─────────────────────────────────────────────── */
+.roles { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 44px; }
+.role { border: var(--bd); border-radius: var(--r); padding: 30px; }
+.role h3 { font-size: 26px; margin-bottom: 12px; }
+.role.loy { background: var(--fog);   color: var(--cyan); border-color: var(--cyan); box-shadow: 4px 4px 0 0 var(--cyan); }
+.role.sab { background: var(--fog);   color: var(--pink); border-color: var(--pink); box-shadow: 8px 8px 0 0 var(--pink); }
+@media (max-width: 780px) { .roles { grid-template-columns: 1fr; } }
+
+/* ── Steps: big numerals, staggered ─────────────────────────────────────── */
+.steps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 26px; margin-top: 46px; }
+.step {
+  display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start;
+  background: var(--fog); color: var(--lav);
+  border: var(--bd); border-radius: var(--r); box-shadow: var(--sh);
+  padding: 26px;
+}
+.step .n {
+  font-family: var(--display); font-weight: 800; font-size: 40px;
+  letter-spacing: -.05em; line-height: 1;
+  color: transparent; -webkit-text-stroke: 2px var(--purple);
+}
+.step h3 { font-size: 19px; margin-bottom: 7px; }
+.step p { margin: 0; font-size: 15px; }
+@media (max-width: 780px) { .steps { grid-template-columns: 1fr; } }
+
+/* ── The twist: single full-width statement ─────────────────────────────── */
+.twist { text-align: center; }
+.twist p.big {
+  font-family: var(--display); font-weight: 800;
+  font-size: clamp(26px, 4.4vw, 52px); letter-spacing: -.04em; line-height: 1.08;
+  max-width: 20ch; margin: 0 auto;
+}
+.twist .hl {
+  background: var(--purple); color: #FFFFFF; border: var(--bd); border-radius: var(--r);
+  padding: 2px 12px; display: inline-block; box-shadow: var(--sh);
+}
+.twist .foot { margin-top: 26px; font-weight: 700; font-size: 15px; }
+
+/* ── Powerups: a static wrapped grid, not a marquee ──────────────────────
+   This was an auto-scrolling marquee. Two reasons it is not any more. There
+   are only twelve powerups, so all of them fit at once and there is nothing to
+   gain by hiding half at any given moment. And the whole point of this section
+   is that a judge can read the price list, which continuous motion actively
+   fights. Motion should be reserved for content that actually changes. */
+.marquee { margin-top: 40px; border-block: var(--bd); padding: 22px 0; }
+.track { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* Powerup chips, injected by landing.js from the server's live catalogue.
+   Duplicated once in the DOM so the marquee can translate -50% and loop
+   seamlessly, which is why the cost is rendered with <s> and not a bare span. */
+.chip {
+  display: inline-flex; align-items: center; gap: 10px; white-space: nowrap;
+  background: var(--ink); color: var(--lav); border: var(--bd); border-radius: var(--r);
+  box-shadow: var(--sh); padding: 11px 17px;
+}
+.chip b { font-family: var(--display); font-weight: 800; font-size: 15px; letter-spacing: -.02em; }
+.chip s {
+  text-decoration: none; font-weight: 700; font-size: 13px; color: var(--cyan);
+  background: var(--fog); border: 2px solid var(--cyan); border-radius: 999px; padding: 2px 9px;
+}
+
+/* ── Lobbies ────────────────────────────────────────────────────────────── */
+.lobbyhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.lobbies { display: grid; grid-template-columns: repeat(auto-fill, minmax(266px, 1fr)); gap: 20px; margin-top: 34px; }
+.skel { height: 128px; border: 2px dashed var(--purple); border-radius: var(--r); background: var(--panel); opacity: .55; }
+
+.lobby {
+  display: flex; flex-direction: column; gap: 13px;
+  background: var(--fog); border: var(--bd); border-radius: var(--r);
+  box-shadow: var(--sh); padding: 22px;
+}
+.lobby .top { display: flex; align-items: baseline; gap: 11px; }
+.lobby .code { font-family: var(--display); font-weight: 800; font-size: 25px; letter-spacing: .04em; }
+.lobby .nm { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Seat pips. Filled means a human is in that chair; hollow fills with a bot at
+   start, so the row reads as "how many real people" at a glance. */
+.lobby .seats { display: flex; gap: 5px; }
+.lobby .seats i { width: 15px; height: 15px; border: 2px solid var(--purple); border-radius: 3px; background: transparent; }
+.lobby .seats i.on { background: var(--cyan); border-color: var(--cyan); }
+.lobby .meta { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.lobby .live { background: var(--cyan); color: #FFFFFF; border-radius: 999px; padding: 3px 10px; }
+.lobby .btn { width: 100%; }
+.state {
+  grid-column: 1 / -1; padding: 30px;
+  background: var(--panel); border: 2px dashed var(--purple); border-radius: var(--r);
+  font-weight: 700; text-align: center;
+}
+
+.joinbar {
+  display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px;
+  background: var(--fog); border: var(--bd); border-radius: var(--r);
+  box-shadow: var(--sh-lg); padding: 20px;
+}
+.joinbar input {
+  flex: 1 1 170px; min-width: 0;
+  font-family: var(--body); font-weight: 700; font-size: 15px;
+  padding: 13px 15px;
+  background: var(--ink); color: var(--lav);
+  border: var(--bd); border-radius: var(--r);
+}
+/* Placeholder contrast: #5b5b64 on white is 6.4:1, comfortably past AA. The
+   browser default is far lighter and fails. */
+.joinbar input::placeholder { color: #5D5A7A; opacity: 1; font-weight: 500; }
+.joinbar input:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+#code { text-transform: uppercase; letter-spacing: .16em; flex: 0 1 140px; }
+.err { margin-top: 14px; font-weight: 700; font-size: 14px; color: var(--pink); min-height: 20px; }
+
+/* ── FAQ: asymmetric two column ─────────────────────────────────────────── */
+.faq { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 44px; }
+.qa { background: var(--panel); border: 2px solid var(--fog); border-radius: var(--r); padding: 26px; }
+.qa:first-child { grid-column: 1 / -1; background: var(--purple); color: #FFFFFF; border-color: var(--cyan); box-shadow: var(--sh-lg); }
+.qa h3 { font-size: 19px; margin-bottom: 9px; }
+.qa p { margin: 0; font-size: 15px; }
+@media (max-width: 780px) { .faq { grid-template-columns: 1fr; } }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+footer { background: var(--panel); color: var(--lav); padding: 44px 0; border-top: var(--bd); }
+footer .row { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; font-size: 14px; font-weight: 500; }
+footer a { font-weight: 700; text-decoration: none; color: var(--cyan); border-bottom: 2px solid var(--purple); }
+footer a:hover { border-bottom-color: var(--cyan); }
+
+/* Scroll reveal, driven by landing.js adding .in to `section > .wrap > *`. */
+@media (prefers-reduced-motion: no-preference) {
+  section > .wrap > * { opacity: 0; transform: translateY(16px); transition: opacity .5s ease, transform .5s ease; }
+  section > .wrap > *.in { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="/">
+      <img src="/khiana-logo.png" alt="" />
+      <b>KHIANA</b>
+    </a>
+    <span class="navlinks">
+      <a href="#how">How it works</a>
+      <a href="#learn">Powerups</a>
+      <a href="#lobbies">Lobbies</a>
+    </span>
+    <a class="btn btn-primary" href="#lobbies">Find a lobby</a>
+  </div>
+</nav>
+
+<header class="dots">
+  <div class="wrap hero">
+    <div>
+      <span class="eyebrow">8 players · 2 saboteurs · nobody wears a colour</span>
+      <h1>You see one corridor.<br>Your advisor sees <span class="hollow">everything</span>.</h1>
+      <p class="lede">It tells you where to go. You cannot check. Someone may have already paid it to lie.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#lobbies">Find a lobby</a>
+        <a class="btn btn-ghost" href="#how">How it works</a>
+      </div>
+    </div>
+
+    <div class="viz">
+      <img src="/khiana-logo.png" alt="Khiana" width="483" height="401" />
+      <div class="whisper">
+        your advisor says
+        <b id="rotator">"North two, then hold. It's clear."</b>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="how" class="s-char">
+  <div class="wrap">
+    <h2>Two teams. One of them is buying the other's advisors.</h2>
+    <p class="sub">Nobody wears a colour. Everyone in the corridor looks identical, and the only public number is how corruptible each advisor is. You learn who the saboteurs are by what happens to people.</p>
+
+    <div class="roles">
+      <div class="role loy">
+        <h3>Loyalists</h3>
+        <p>Finish <b id="cfg-tasks">5</b> tasks, then get <b id="cfg-surv">3</b> survivors to the exit. You need each other to reach tiles you cannot reach alone, which means trusting advisors you cannot audit.</p>
+      </div>
+      <div class="role sab">
+        <h3>Saboteurs</h3>
+        <p>Cut the loyalists down, or run out the clock. Forcing someone into a wall costs 2.00. Paying their own advisor to walk them there costs about 1.00. Do the maths.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="s-white">
+  <div class="wrap">
+    <h2>A round, start to finish</h2>
+    <div class="steps">
+      <div class="step"><span class="n">01</span><div><h3>Set your advisor's retainer</h3><p>A public number from 20 to 95. High means it refuses most bribes and plays scared. Low means it will actively solicit them, and everyone can see that about you before the game starts.</p></div></div>
+      <div class="step"><span class="n">02</span><div><h3>Walk a maze you cannot see</h3><p>First person, one corridor at a time. Walls block sight properly, so you learn the map by walking it and by believing what you are told.</p></div></div>
+      <div class="step"><span class="n">03</span><div><h3>Read the briefing. Decide.</h3><p>Every <b id="cfg-tick">15</b> seconds your advisor sends at most two sentences. A bought advisor writes those two sentences very carefully.</p></div></div>
+      <div class="step"><span class="n">04</span><div><h3>The ledger opens</h3><p>At the end, every payment is published: who paid, how much, what they asked for, and whether your advisor went through with it.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="s-sage twist">
+  <div class="wrap">
+    <p class="big">The audience watches every bribe land. <span class="hl">You never find out until it is over.</span></p>
+    <p class="foot">Spectators see the full map and the whole advisor channel. Players see a corridor.</p>
+  </div>
+</section>
+
+<section id="learn" class="s-yellow dots">
+  <div class="wrap">
+    <span class="eyebrow">The economy</span>
+    <h2>What you can buy, and what it costs</h2>
+    <p class="sub">Every advisor starts with <b id="cfg-bal">5</b> credits and may buy at most <b id="cfg-max">3</b> things all game. Opening a channel with another advisor costs <b id="cfg-fee">0.25</b>, paid to them.</p>
+    <div class="marquee"><div class="track" id="powerups"></div></div>
+  </div>
+</section>
+
+<section id="lobbies" class="s-white">
+  <div class="wrap">
+    <div class="lobbyhead">
+      <div>
+        <h2>Open lobbies</h2>
+        <p class="sub">Empty seats fill with bots, so a table is playable the moment it exists.</p>
+      </div>
+      <button class="btn btn-ghost" id="refresh" type="button">Refresh</button>
+    </div>
+
+    <div class="lobbies" id="list">
+      <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+    </div>
+
+    <div class="joinbar">
+      <input type="text" id="code" placeholder="CODE" maxlength="6" aria-label="Room code" />
+      <button class="btn btn-ghost" id="joincode" type="button">Join by code</button>
+      <input type="text" id="hostname" placeholder="Name your table" maxlength="40" aria-label="New table name" />
+      <button class="btn btn-primary" id="create" type="button">Open a table</button>
+    </div>
+    <div class="err" id="err" role="status" aria-live="polite"></div>
+  </div>
+</section>
+
+<section class="s-char">
+  <div class="wrap">
+    <h2>Before you join</h2>
+    <div class="faq">
+      <div class="qa">
+        <h3>Can I tell if my advisor was paid?</h3>
+        <p>Not directly. A loyalist can buy an audit, which reports only whether an advisor took money in the last three ticks, never from whom. A cheap nuisance payment is therefore a viable bluff.</p>
+      </div>
+      <div class="qa">
+        <h3>Do I need a wallet or any money?</h3>
+        <p>No. Advisors hold the credits, not you, and the whole economy runs on a valueless testnet token. You join with a name.</p>
+      </div>
+      <div class="qa">
+        <h3>What if I get disconnected?</h3>
+        <p>Your seat is held. Rejoin and you resume the same player, the same team, and the same pile of bribes your advisor has quietly accepted.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap row">
+    <span>Khiana · testnet only · valueless tokens</span>
+    <span><a href="/play.html">Play</a> · <a href="http://localhost:5174" id="speclink">Spectate</a></span>
+  </div>
+</footer>
+
+<script type="module" src="/src/landing.js"></script>
+</body>
+</html>

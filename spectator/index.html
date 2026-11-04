@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Khiana · Channel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#EEF3FC">
+<style>
+  :root {
+    /* Monad brand palette (monad.xyz/brand-and-media-kit), identical to the
+       landing page and the game so all three read as one product. */
+    --ink:#EEF3FC; --panel:#FFFFFF; --fog:#DFE9FB; --edge:#B9CCEC;
+    --purple:#6B4EF0; --lavender:#1C1938; --cyan:#1A5F99;
+    --pink:#C2185B; --orange:#B26A00;
+    --bone:var(--lavender); --muted:#5D5A7A;
+    --amber:var(--cyan); --rust:var(--pink); --violet:var(--purple); --teal:var(--cyan);
+    --mono:'Roboto Mono',ui-monospace,monospace;
+    --display:'Pirata One',system-ui,serif;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--ink); color:var(--bone);
+    font-family:var(--mono); overflow:hidden; }
+
+  #app { display:grid; grid-template-columns: 1fr 400px; height:100vh; }
+  @media (max-width: 900px) { #app { grid-template-columns: 1fr; grid-template-rows: 1fr 45vh; } }
+
+  /* ── Left: the board ─────────────────────────────────────────────────── */
+  #board { position:relative; }
+  #board canvas { display:block; width:100%; height:100%; }
+
+  #hdr {
+    position:absolute; top:0; left:0; right:0; z-index:5;
+    display:flex; align-items:center; gap:26px; padding:16px 22px;
+    background:linear-gradient(180deg,rgba(238,243,252,.96),transparent);
+  }
+  #mark { font-family:var(--display); font-weight:400; font-size:16px; letter-spacing:.22em; }
+  #mark span { color:var(--rust); }
+  .stat { font-size:10px; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; }
+  .stat b { display:block; font-size:19px; color:var(--bone); font-weight:600; letter-spacing:0;
+    font-variant-numeric:tabular-nums; }
+  .stat.amber b { color:var(--amber); }
+
+  /* ── Treasuries: money is the story, so it gets the persistent display ── */
+  #sound {
+    margin-left:auto; align-self:center;
+    padding:7px 13px; border-radius:4px; cursor:pointer;
+    background:transparent; border:1px solid var(--edge); color:var(--muted);
+    font-family:var(--mono); font-size:10px; letter-spacing:.14em;
+  }
+  #sound:hover { border-color:var(--muted); color:var(--bone); }
+  #sound.on { border-color:var(--amber); color:var(--amber); }
+
+  #treasuries {
+    position:absolute; bottom:0; left:0; right:0; z-index:5;
+    display:flex; gap:2px; padding:16px 22px 18px;
+    background:linear-gradient(0deg,rgba(238,243,252,.96),transparent);
+  }
+  .tr { flex:1; }
+  .tr .nm { font-size:10px; color:var(--muted); margin-bottom:5px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tr.sab .nm { color:var(--rust); }
+  .tr.dead { opacity:.28; }
+  .tr .bar { height:5px; background:var(--fog); border-radius:2px; overflow:hidden; }
+  .tr .bar i { display:block; height:100%; background:var(--amber); transition:width .4s ease; }
+  .tr.bought .bar i { background:var(--violet); }
+  .tr .amt { font-size:10px; color:var(--amber); margin-top:4px; font-variant-numeric:tabular-nums; }
+
+  /* ── Right: the channel. This is the thing players can't see. ────────── */
+  #side { border-left:1px solid var(--edge); display:flex; flex-direction:column; min-height:0; }
+  #sidehd {
+    padding:15px 18px 12px; border-bottom:1px solid var(--edge);
+  }
+  #sidehd h2 {
+    font-family:var(--display); font-weight:400; font-size:14px;
+    letter-spacing:.2em; margin:0 0 5px; color:var(--violet);
+  }
+  #sidehd p { margin:0; font-size:10px; color:var(--muted); line-height:1.5; }
+
+  #feed { flex:1; overflow-y:auto; padding:12px 18px; min-height:0; }
+  #feed::-webkit-scrollbar { width:5px; }
+  #feed::-webkit-scrollbar-thumb { background:var(--edge); border-radius:3px; }
+
+  .msg { margin-bottom:11px; font-size:11.5px; line-height:1.5; animation:in .25s ease; }
+  @keyframes in { from { opacity:0; transform:translateX(8px); } }
+  .msg .meta { font-size:9px; letter-spacing:.1em; color:var(--muted); margin-bottom:3px; }
+  .msg .body { color:var(--bone); }
+
+  .msg.bribe .body { color:var(--amber); }
+  .msg.bribe { border-left:2px solid var(--amber); padding-left:9px; }
+  .msg.settled { border-left:2px solid var(--amber); padding-left:9px; background:rgba(26,95,153,.09); padding:7px 9px; border-radius:0 3px 3px 0; }
+  .msg.settled .body { color:var(--amber); font-weight:500; }
+  .msg.kill { border-left:2px solid var(--rust); padding-left:9px; }
+  .msg.kill .body { color:var(--rust); }
+  .msg.audit .body { color:var(--teal); }
+  .msg.system .body { color:var(--muted); font-style:italic; }
+
+  /* ── THE MOMENT. A briefing from an agent that has taken money.
+     This is the dramatic irony beat — 150 people know, the player doesn't.
+     Everything else on this screen is quiet so this can be loud.        ── */
+  .msg.corrupt {
+    border-left:2px solid var(--violet); padding:9px 11px;
+    background:rgba(107,78,240,.13); border-radius:0 3px 3px 0;
+  }
+  .msg.corrupt .meta { color:var(--violet); }
+  .msg.corrupt .body { color:var(--bone); }
+  /* Proof-of-settlement link. Deliberately quiet — it should read as a
+     receipt you can check, not compete with the betrayal it documents. */
+  .tx {
+    display: inline-block; margin-left: 6px;
+    font-size: 10px; letter-spacing: .04em;
+    color: var(--muted); text-decoration: none;
+    border-bottom: 1px dotted currentColor;
+  }
+  .tx:hover { color: var(--amber); }
+  /* Mock settlement is a label, not a link — nothing to click, and it must
+     not look clickable. */
+  .tx.muted { border-bottom-style: none; opacity: .5; font-style: italic; }
+  .tx.muted:hover { color: var(--muted); }
+  .msg.corrupt .tagline {
+    display:inline-block; margin-top:6px; font-size:9px; letter-spacing:.14em;
+    color:var(--violet); text-transform:uppercase;
+  }
+
+  #ticker {
+    border-top:1px solid var(--edge); padding:11px 18px;
+    font-size:10px; color:var(--muted); display:flex; justify-content:space-between;
+  }
+  #ticker b { color:var(--amber); font-variant-numeric:tabular-nums; }
+
+  /* ── Reveal overlay ──────────────────────────────────────────────────── */
+  #reveal {
+    position:fixed; inset:0; background:rgba(238,243,252,.985); z-index:100;
+    display:none; overflow-y:auto; padding:44px;
+  }
+  #reveal.on { display:block; }
+  /* The only way out of the reveal. Pinned so it stays reachable however far
+     the ledger scrolls, because a long round makes this overlay taller than
+     the viewport. */
+  #rvclose {
+    position:fixed; top:22px; right:26px; z-index:101;
+    padding:9px 16px; border-radius:4px; cursor:pointer;
+    background:transparent; border:1px solid var(--edge); color:var(--muted);
+    font-family:var(--mono); font-size:10px; letter-spacing:.16em;
+  }
+  #rvclose:hover { border-color:var(--amber); color:var(--amber); }
+  #rvclose:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
+  #reveal h1 { font-family:var(--display); font-weight:400; font-size:44px;
+    letter-spacing:.16em; margin:0 0 6px; }
+  #reveal .sub { color:var(--muted); font-size:13px; margin-bottom:34px; }
+  #reveal .row { border-top:1px solid var(--edge); padding:15px 0;
+    display:grid; grid-template-columns:180px 90px 90px 1fr; gap:16px; align-items:start; }
+  #reveal .nm { color:var(--bone); }
+  #reveal .nm.sab { color:var(--rust); }
+  #reveal .bal { color:var(--amber); font-variant-numeric:tabular-nums; }
+  #reveal .took { font-size:11px; color:var(--muted); line-height:1.7; }
+  #reveal .took .hon { color:var(--violet); }
+
+  /* Commit-reveal proof. Monospace and unglamorous on purpose — it should
+     read as a receipt anyone can verify, not a claim they have to trust. */
+  #rolecommit { margin-top:34px; padding-top:22px; border-top:1px solid var(--edge); }
+  #rolecommit h3 { font-family:var(--display); font-size:11px; letter-spacing:.2em;
+    color:var(--muted); margin:0 0 14px; font-weight:600; }
+  #rolecommit h3 em { color:var(--rust); font-style:normal; }
+  .rc-line { display:flex; gap:12px; align-items:baseline; margin-bottom:8px; font-size:11px; flex-wrap:wrap; }
+  .rc-line > span { color:var(--muted); min-width:170px; }
+  .rc-line code { color:var(--bone); word-break:break-all; font-size:10.5px; }
+  .rc-verdict { margin-top:12px; font-size:12px; }
+  .rc-verdict .ok { color:var(--teal); }
+  .rc-verdict .bad { color:var(--rust); font-weight:600; }
+  .rc-verdict .pending { color:var(--muted); font-style:italic; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <div id="board">
+      <canvas id="cv"></canvas>
+      <div id="hdr">
+        <img id="mark" src="/khiana-logo.png" alt="Khiana" height="30" />
+        <div class="stat">TICK<b id="tick">0/40</b></div>
+        <div class="stat amber">TASKS<b id="tasks">0/5</b></div>
+        <div class="stat">ALIVE<b id="alive">8</b></div>
+        <div class="stat amber">BRIBED<b id="bribed">0.00</b></div>
+      <button id="sound" type="button" title="Browsers block audio until you click">SOUND OFF</button>
+      </div>
+      <div id="treasuries"></div>
+    </div>
+
+    <div id="side">
+      <div id="sidehd">
+        <h2>AGENT CHANNEL</h2>
+        <p>Every message between advisors. The players cannot see any of this.</p>
+      </div>
+      <div id="feed"></div>
+      <div id="ticker">
+        <span>burned <b id="burned">0.00</b></span>
+        <span>betrayals <b id="betrayals">0</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="reveal">
+    <button id="rvclose" type="button" title="Back to the board (Esc)">BACK TO BOARD</button>
+    <h1 id="rvwin">...</h1>
+    <p class="sub" id="rvsub"></p>
+    <div id="rvrows"></div>
+    <div id="rolecommit" hidden></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

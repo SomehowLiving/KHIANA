@@ -1,0 +1,14 @@
+{
+  "name": "khiana",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A 3D fog-of-war maze where your AI advisor can see everything — and may have been paid to lie to you.",
+  "scripts": {
+    "setup": "cd server && npm i && cd ../client && npm i && cd ../spectator && npm i",
+    "headless": "cd server && npm run headless",
+    "test": "cd server && node integration.test.mjs",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "spectator": "cd spectator && npm run dev"
+  }
+}
