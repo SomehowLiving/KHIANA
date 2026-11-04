@@ -57,7 +57,7 @@ describe('KhianaEscrow', () => {
 
     token = await ethers.deployContract('KhianaCredit', [SUPPLY, engine.address]);
     await token.waitForDeployment();
-    escrow = await ethers.deployContract('KhianaEscrow', [engine.address, await token.getAddress()]);
+    escrow = await ethers.deployContract('KhianaEscrow', [engine.address, await token.getAddress(), engine.address, 0]);
     await escrow.waitForDeployment();
 
     for (const who of [payer, payee, outsider]) {
@@ -132,6 +132,26 @@ describe('KhianaEscrow', () => {
     await expect(escrow.connect(engine).release(0))
       .to.changeTokenBalance(token, payee, AMOUNT);
     expect((await escrow.get(0)).status).to.equal(1);
+  });
+
+  it('takes the bribe fee for the treasury on release, never on refund', async () => {
+    const fee = await ethers.deployContract('KhianaEscrow',
+      [engine.address, await token.getAddress(), outsider.address, 500]);
+    await token.connect(payer).approve(await fee.getAddress(), AMOUNT * 2n);
+    await fee.connect(payer).lock(payee.address, AMOUNT, cond('x'), TTL);
+    await expect(fee.connect(engine).release(0)).to.changeTokenBalances(
+      token, [payee, outsider], [AMOUNT * 95n / 100n, AMOUNT * 5n / 100n]);
+
+    await fee.connect(payer).lock(payee.address, AMOUNT, cond('y'), 1);
+    await ethers.provider.send('evm_increaseTime', [5]);
+    await ethers.provider.send('evm_mine', []);
+    await expect(fee.refund(1)).to.changeTokenBalance(token, payer, AMOUNT);
+  });
+
+  it('refuses a fee above 20%', async () => {
+    await expect(ethers.deployContract('KhianaEscrow',
+      [engine.address, await token.getAddress(), outsider.address, 2001]))
+      .to.be.revertedWithCustomError(escrow, 'FeeTooHigh');
   });
 
   // The whole point of the contract: an enemy agent cannot self-attest.

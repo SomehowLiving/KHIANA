@@ -3,7 +3,9 @@ import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 
+import { isAddress, verifyMessage } from 'viem';
 import { CONFIG, TABLE_SIZES, rulesFor } from './config.js';
+import { hasEntered, joinMessage, potAvailable } from './economy/pot.js';
 import { checkFacilitator } from './economy/x402.js';
 import { mountX402 } from './economy/x402-server.js';
 import { providerStatus } from './agents/llm.js';
@@ -98,6 +100,11 @@ app.get('/config', (_req, res) => {
     })),
     mockChain: CONFIG.MOCK_CHAIN,
     explorer: CONFIG.CHAIN.EXPLORER,
+    // Paid tables: offered only when the server is live with a deployed pot.
+    paidTables: potAvailable(),
+    entryFees: potAvailable() ? CONFIG.ECONOMY.ENTRY_FEES : [0],
+    chainId: CONFIG.CHAIN.CHAIN_ID,
+    rpcUrl: CONFIG.CHAIN.RPC_URL,
   });
 });
 
@@ -192,6 +199,7 @@ app.post('/rooms', (req, res) => {
       hostName: req.body?.hostName,
       seed: req.body?.seed,
       players: req.body?.players,
+      entryFee: req.body?.entryFee,
     });
     res.json({ ok: true, room: roomSummary(room) });
   } catch (err) {
@@ -242,6 +250,29 @@ app.get('/game/reveal', (req, res) => {
  */
 mountX402(app, () => defaultRoom.game);
 
+/**
+ * A paid seat needs two proofs: the wallet signed this game's join message,
+ * so nobody can sit in a seat someone else paid for, and the pot contract
+ * shows that wallet paid. Winnings go to that same address.
+ */
+async function verifyPaidEntry(room, msg) {
+  const pot = room.pot;
+  if (pot.status !== 'open') {
+    return { ok: false, error: `This table's pot is ${pot.status}. Try again in a moment.` };
+  }
+  if (!isAddress(msg.wallet ?? '') || !msg.signature) {
+    return { ok: false, error: `Connect a wallet and pay the ${pot.fee} MON entry fee to sit here.` };
+  }
+  const signed = await verifyMessage({
+    address: msg.wallet, message: joinMessage(pot.gameId), signature: msg.signature,
+  }).catch(() => false);
+  if (!signed) return { ok: false, error: 'Wallet signature did not match.' };
+  if (!(await hasEntered(pot.gameId, msg.wallet))) {
+    return { ok: false, error: `No entry fee from this wallet yet. Pay ${pot.fee} MON first.` };
+  }
+  return { ok: true, address: msg.wallet };
+}
+
 // ── WebSocket ───────────────────────────────────────────────────────────────
 
 wss.on('connection', (ws, req) => {
@@ -275,7 +306,26 @@ wss.on('connection', (ws, req) => {
 
     switch (msg.type) {
       case 'JOIN': {
-        const r = seatPlayer(room, ws, { name: msg.name, token: msg.token, playerId: msg.playerId });
+        // Paid tables: a returning seat (token) is let straight back in;
+        // anyone new must prove they own a wallet that paid this game's pot.
+        const returning = msg.token && room.seatTokens.has(msg.token);
+        if (room.pot && !returning) {
+          verifyPaidEntry(room, msg).then(wallet => {
+            if (!wallet.ok) return send(ws, { type: 'ERROR', context: 'PAY', error: wallet.error });
+            join(wallet.address);
+          }).catch(err => send(ws, { type: 'ERROR', context: 'PAY', error: String(err?.message ?? err) }));
+          break;
+        }
+        join(null);
+        break;
+      }
+
+      default:
+        break;
+    }
+
+    function join(wallet) {
+        const r = seatPlayer(room, ws, { name: msg.name, token: msg.token, playerId: msg.playerId, wallet });
         if (r.error) return send(ws, { type: 'ERROR', error: r.error });
         send(ws, {
           type: 'JOINED',
@@ -286,9 +336,9 @@ wss.on('connection', (ws, req) => {
         });
         pushState(room, ws);
         broadcast(room);   // the roster changed for everyone watching
-        break;
-      }
+    }
 
+    switch (msg.type) {
       case 'SPECTATE':
         room.sockets.set(ws, { role: 'spectator', playerId: null });
         pushState(room, ws);

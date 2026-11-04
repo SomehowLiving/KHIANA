@@ -1,4 +1,4 @@
-import { parseEther, parseEventLogs, keccak256, toHex } from 'viem';
+import { parseEther, formatEther, parseEventLogs, keccak256, toHex } from 'viem';
 
 import { CONFIG } from '../config.js';
 import { ESCROW_ABI, SHOP_ABI } from './abi.js';
@@ -151,7 +151,14 @@ export async function releaseEscrow(escrowId, { mock = CONFIG.MOCK_CHAIN } = {})
 
   try {
     const res = await sendContract(engine, { ...params, gas: await gasFor(engine, params) });
-    return { ...res, url: explorer.tx(res.txHash) };
+    // What the payee actually received, after the platform's bribe fee —
+    // read from the contract's own event so the books can't disagree with it.
+    let paid = null;
+    try {
+      const [ev] = parseEventLogs({ abi: ESCROW_ABI, eventName: 'Released', logs: res.receipt.logs });
+      paid = Number(formatEther(ev.args.amount));
+    } catch { /* paid stays null; the caller falls back to the configured fee */ }
+    return { ...res, paid, url: explorer.tx(res.txHash) };
   } catch (err) {
     return { ok: false, txHash: null, error: String(err?.shortMessage ?? err) };
   }

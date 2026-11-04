@@ -15,6 +15,7 @@ Khiana is a hidden-traitor maze game. Eight players walk a dark maze they can ba
 | 12 powerups | Vision, speed, invisibility, jamming, freezing, audits, bounties and more, all bought with KHIA. |
 | Spectator screen | Shows the full maze, every team, and the advisor channel with each bribe as it happens. |
 | End-of-game reveal | Each player sees who paid their advisor, how much, and whether the advisor followed through. |
+| Paid tables | Connect a wallet (MetaMask etc.) and pay a MON entry fee. Surviving winners split the pot; the platform takes a 5% rake, plus 5% of every bribe. |
 | Lobbies | Room codes, a host who starts the game, and bots that fill empty seats. Each lobby is 8 players (2 Saboteurs) or 4 players (1 Saboteur). |
 | Record and playback | A recorded game can be replayed on the spectator screen. |
 
@@ -95,9 +96,10 @@ Every powerup except BOUNTY burns the KHIA spent. A BOUNTY reward is held back f
 | Contract | Address | Role |
 |---|---|---|
 | KhianaCredit (KHIA) | [`0x8Fe5b8D00Fa11D0d6D3B842cCb68BC1CCd092284`](https://testnet.monadscan.com/address/0x8Fe5b8D00Fa11D0d6D3B842cCb68BC1CCd092284) | The game's token. 1000 KHIA minted once into the engine's treasury, with no way to mint more. Supports signed transfers (EIP-3009), so an advisor signs a payment and the engine submits it. |
-| KhianaEscrow | [`0xD8205E7cB296b48f39b208e510fF4B92497Bf1E9`](https://testnet.monadscan.com/address/0xD8205E7cB296b48f39b208e510fF4B92497Bf1E9) | Holds each bribe until the engine confirms it was delivered. Anyone can refund it to the payer once it expires. |
-| PowerupShop | [`0xDD323c8570dB8554AAdfcF504e792f7f0Fdc647C`](https://testnet.monadscan.com/address/0xDD323c8570dB8554AAdfcF504e792f7f0Fdc647C) | Sells powerups and burns the KHIA, so total supply visibly falls. |
-| RoleCommit | [`0x8541613CCaaB40fb832F0F7DdE3B1A7abCe0021A`](https://testnet.monadscan.com/address/0x8541613CCaaB40fb832F0F7DdE3B1A7abCe0021A) | Publishes a hash of the teams before the first move and reveals them at the end, proving nobody was moved between teams. |
+| KhianaEscrow | [`0x816ad71866EbA21BB5F69C04e39abB5f801b43c8`](https://testnet.monadscan.com/address/0x816ad71866EbA21BB5F69C04e39abB5f801b43c8) | Holds each bribe until the engine confirms it was delivered. Anyone can refund it to the payer once it expires. |
+| PowerupShop | [`0x3900A7C4C0a08572394F791242157B8A28B8dBE4`](https://testnet.monadscan.com/address/0x3900A7C4C0a08572394F791242157B8A28B8dBE4) | Sells powerups and burns the KHIA, so total supply visibly falls. |
+| KhianaPot | [`0x9f7010f2A550A69d8307f4A2dA395992633C51DE`](https://testnet.monadscan.com/address/0x9f7010f2A550A69d8307f4A2dA395992633C51DE) | Paid tables: holds players' MON entry fees, pays winners, takes a 5% rake. |
+| RoleCommit | [`0xDE90658F579F618b3ccF16319b0F28113bccFD67`](https://testnet.monadscan.com/address/0xDE90658F579F618b3ccF16319b0F28113bccFD67) | Publishes a hash of the teams before the first move and reveals them at the end, proving nobody was moved between teams. |
 
 Engine wallet: [`0x2acfF541cf34B190276eB65a082cB16378aDF9D8`](https://testnet.monadscan.com/address/0x2acfF541cf34B190276eB65a082cB16378aDF9D8)
 

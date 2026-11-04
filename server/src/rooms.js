@@ -6,6 +6,7 @@ import { playerView, spectatorView } from './game/fog.js';
 import { stepAllBots, claimSeat, releaseSeat, firstOpenSeat } from './agents/bots.js';
 import { commitRoles } from './economy/roles.js';
 import { stakeAgents } from './economy/stakes.js';
+import { potAvailable, potIdFor, openPot, settlePot, cancelPot } from './economy/pot.js';
 import { startRecording, captureFrame, captureReveal, stopRecording, isRecording } from './recording.js';
 
 /**
@@ -55,7 +56,7 @@ function newGame(room, seed) {
   return game;
 }
 
-export function createRoom({ name, isPublic = true, seed, hostName, code: fixedCode, onChain = false, players } = {}) {
+export function createRoom({ name, isPublic = true, seed, hostName, code: fixedCode, onChain = false, players, entryFee = 0 } = {}) {
   // Table size is chosen per lobby: 4 or 8 seats. Anything else gets the default.
   const seats = TABLE_SIZES.includes(Number(players)) ? Number(players) : CONFIG.GAME.PLAYERS;
   if (rooms.size >= MAX_ROOMS) throw new Error('server is at room capacity');
@@ -75,6 +76,10 @@ export function createRoom({ name, isPublic = true, seed, hostName, code: fixedC
     isPublic: Boolean(isPublic),
     players: seats,
     onChain: Boolean(onChain),
+    // MON per seat, 0 = free. Only offered when the server is live with a pot.
+    entryFee: potAvailable() && CONFIG.ECONOMY.ENTRY_FEES.includes(Number(entryFee)) ? Number(entryFee) : 0,
+    pot: null,
+    walletSeats: new Map(),   // wallet address -> playerId: one paid seat per wallet
     game: null,
     loop: null,
     starting: false,
@@ -97,8 +102,78 @@ export function createRoom({ name, isPublic = true, seed, hostName, code: fixedC
     autoStartAt: null,
   };
   room.game = newGame(room, seed);
+  room.pot = newPot(room);
   rooms.set(code, room);
   return room;
+}
+
+// ── Paid tables ─────────────────────────────────────────────────────────────
+
+/**
+ * Open this game's pot on chain. Entries are refused until it lands, so the
+ * lobby shows its status and the client waits for 'open' before paying.
+ */
+function newPot(room) {
+  if (!(room.entryFee > 0)) return null;
+  const pot = {
+    fee: room.entryFee,
+    gameId: potIdFor(room.code, room.game.seed),
+    address: CONFIG.CHAIN.POT_ADDRESS,
+    status: 'opening',
+    entrants: [],
+  };
+  openPot(pot.gameId, pot.fee)
+    .then(r => { pot.status = r.ok ? 'open' : 'failed'; pot.openTx = r.txHash; })
+    .catch(err => { pot.status = 'failed'; pot.error = String(err?.shortMessage ?? err); })
+    .finally(() => broadcast(room));
+  return pot;
+}
+
+/** A paid game that will never finish refunds everyone in full. */
+function abandonPot(room) {
+  const pot = room.pot;
+  if (!pot || pot.status !== 'open') return;
+  pot.status = 'cancelling';
+  cancelPot(pot.gameId)
+    .then(r => { pot.status = r.ok ? 'cancelled' : 'open'; pot.cancelTx = r.txHash; })
+    .catch(err => { pot.status = 'open'; pot.error = String(err?.shortMessage ?? err); });
+}
+
+/**
+ * Pay the pot: paying players who survive on the winning team split it,
+ * minus the rake. If none did, the contract refunds every entrant minus the
+ * rake. Patches the reveal like the other end-of-game settlements.
+ */
+function settleRoomPot(room) {
+  const pot = room.pot;
+  const g = room.game;
+  if (!pot || pot.status !== 'open') return;
+  const winners = [...new Set(Object.values(g.players)
+    .filter(p => p.alive && p.team === g.winner && p.wallet)
+    .map(p => p.wallet))];
+  pot.status = 'settling';
+  settlePot(pot.gameId, winners)
+    .then(r => {
+      pot.status = r.ok ? 'settled' : 'open';
+      pot.settleTx = r.txHash;
+      if (g.reveal) {
+        g.reveal.pot = {
+          fee: pot.fee, entrants: pot.entrants.length, winners,
+          share: r.share, rake: r.rake, txHash: r.txHash, url: r.url, refunded: winners.length === 0,
+        };
+      }
+    })
+    .catch(err => { pot.status = 'open'; pot.error = String(err?.shortMessage ?? err); })
+    .finally(() => broadcast(room));
+}
+
+/** What a client needs to pay into this table. */
+function potSummary(pot) {
+  if (!pot) return null;
+  return {
+    fee: pot.fee, gameId: pot.gameId, address: pot.address, status: pot.status,
+    entrants: pot.entrants.length, openTx: pot.openTx ?? null, settleTx: pot.settleTx ?? null,
+  };
 }
 
 export function getRoom(code) {
@@ -135,6 +210,8 @@ export function roomSummary(room) {
     /** Seconds until bots take over, or null if a human is expected. */
     autoStartIn: room.autoStartAt ? Math.max(0, Math.round((room.autoStartAt - Date.now()) / 1000)) : null,
     createdAt: room.createdAt,
+    entryFee: room.entryFee,
+    pot: potSummary(room.pot),
   };
 }
 
@@ -236,9 +313,11 @@ export function canStart(room, token) {
  * given whatever seat happened to be free — a different human, a different
  * team, someone else's bribes.
  */
-export function seatPlayer(room, ws, { name, token, playerId } = {}) {
+export function seatPlayer(room, ws, { name, token, playerId, wallet } = {}) {
   const g = room.game;
-  const resumedId = token && room.seatTokens.get(token);
+  // A paid wallet always gets its own seat back: one entry fee, one seat.
+  const walletSeat = wallet && room.walletSeats.get(wallet.toLowerCase());
+  const resumedId = (token && room.seatTokens.get(token)) || walletSeat;
   const seat = (resumedId && g.players[resumedId])
     ?? (playerId ? g.players[playerId] : null)
     ?? randomOpenSeat(g);
@@ -247,6 +326,14 @@ export function seatPlayer(room, ws, { name, token, playerId } = {}) {
   if (!seat.alive && !resumedId) return { error: 'No living seats left in this game.' };
 
   claimSeat(g, seat.id, name);
+  if (wallet) {
+    // The payout address. Kept even if the human disconnects and a bot takes
+    // over: their seat can still win, and they paid for it.
+    const w = wallet.toLowerCase();
+    seat.wallet = w;
+    room.walletSeats.set(w, seat.id);
+    if (room.pot && !room.pot.entrants.includes(w)) room.pot.entrants.push(w);
+  }
   room.sockets.set(ws, { role: 'player', playerId: seat.id });
   room.lastSeenAt = Date.now();
 
@@ -390,6 +477,7 @@ export async function startRoom(room) {
 export function finishRoom(room) {
   stopRoomLoop(room);
   const reveal = endGame(room.game, () => broadcast(room));
+  settleRoomPot(room);
   if (isRecording() && room.recordingFile) {
     captureReveal(reveal);
     stopRecording().then(r => console.log(`  recording closed (${r.frames} frames)`));
@@ -406,7 +494,10 @@ export function stopRoomLoop(room) {
 
 export function resetRoom(room, seed) {
   stopRoomLoop(room);
+  if (!room.game.reveal) abandonPot(room);
   room.game = newGame(room, seed);
+  room.pot = newPot(room);
+  room.walletSeats = new Map();
   room.seatTokens = new Map();
   broadcast(room);
   return room;
@@ -416,6 +507,7 @@ export function closeRoom(code) {
   const room = rooms.get(code);
   if (!room) return false;
   stopRoomLoop(room);
+  if (!room.game.reveal) abandonPot(room);
   for (const ws of room.sockets.keys()) { try { ws.close(); } catch { /* already gone */ } }
   return rooms.delete(code);
 }

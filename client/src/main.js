@@ -1,7 +1,9 @@
 import { Scene } from './scene.js';
+import { payAndSign } from './wallet.js';
 import { unlock, sfx, speak, setPref, getPrefs, stopSpeaking, startAmbience, setTension, outputLevel, isUnlocked } from './audio.js';
 
 const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8787';
+const HTTP_URL = WS_URL.replace(/^ws/, 'http');
 
 /**
  * Room + seat continuity.
@@ -57,19 +59,49 @@ el('weight').addEventListener('input', e => {
 });
 el('weight').dispatchEvent(new Event('input'));
 
-el('join').addEventListener('click', () => {
+// ── Paid tables ─────────────────────────────────────────────────────────────
+// A table with an entry fee needs a connected wallet that has paid. A seat
+// token from this tab means we already sat down (and paid), so skip it.
+let pot = null;
+fetch(`${HTTP_URL}/rooms/${encodeURIComponent(ROOM ?? 'MAIN')}`)
+  .then(r => r.json())
+  .then(({ room }) => {
+    if (!room?.pot || sessionStorage.getItem(TOKEN_KEY)) return;
+    pot = room.pot;
+    const note = el('paynote');
+    note.hidden = false;
+    note.textContent = `Paid table: ${pot.fee} MON to enter. Surviving winners split the pot, minus a small platform rake.`;
+    el('join').textContent = `Connect wallet & pay ${pot.fee} MON`;
+  })
+  .catch(() => {});
+
+el('join').addEventListener('click', async () => {
   // Browsers refuse to start audio outside a user gesture, and this click is
   // the only guaranteed one before the game begins.
   unlock();
   startAmbience();
   const name = el('name').value.trim() || 'Anon';
-  connect(name, Number(el('weight').value));
+
+  let paid = null;
+  if (pot) {
+    const btn = el('join');
+    const note = el('paynote');
+    btn.disabled = true;
+    try {
+      paid = await payAndSign(pot, step => { note.textContent = step; });
+    } catch (err) {
+      note.textContent = err?.message ?? String(err);
+      btn.disabled = false;
+      return;
+    }
+  }
+  connect(name, Number(el('weight').value), paid);
   el('gate').style.display = 'none';
 });
 
 // ── Networking ──────────────────────────────────────────────────────────────
 
-function connect(name, weight) {
+function connect(name, weight, paid = null) {
   ws = new WebSocket(ROOM ? `${WS_URL}?room=${encodeURIComponent(ROOM)}` : WS_URL);
 
   ws.onopen = () => {
@@ -77,6 +109,7 @@ function connect(name, weight) {
       type: 'JOIN', name,
       room: ROOM ?? undefined,
       token: sessionStorage.getItem(TOKEN_KEY) ?? undefined,
+      ...(paid ? { wallet: paid.wallet, signature: paid.signature } : {}),
     }));
     ws.send(JSON.stringify({ type: 'SET_GOAL_WEIGHT', value: weight, room: ROOM ?? undefined }));
   };

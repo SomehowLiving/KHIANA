@@ -169,8 +169,8 @@ if (lock.ok && lock.escrowId != null) {
 
   if (rel.ok) {
     const p2After = await creditBalance(p2.address);
-    check('payee received the bribe', Math.abs((p2After - p2BeforeEscrow) - bribe) < 1e-9,
-      `+${(p2After - p2BeforeEscrow).toFixed(6)} KHIA`);
+    check('payee received the bribe, less the fee', rel.paid != null && Math.abs((p2After - p2BeforeEscrow) - rel.paid) < 1e-9,
+      `+${(p2After - p2BeforeEscrow).toFixed(6)} KHIA of ${bribe}`);
 
     const state = await publicClient().readContract({
       address: CONFIG.CHAIN.ESCROW_ADDRESS, abi: ESCROW_ABI,

@@ -41,6 +41,14 @@ async function loadConfig() {
   try {
     const c = await api('/config').then(r => r.json());
 
+    // Entry-fee choice appears only when the server can run paid tables.
+    const fee = el('entryfee');
+    if (fee && c.paidTables) {
+      fee.innerHTML = c.entryFees.map(f =>
+        `<option value="${f}">${f > 0 ? `${f} MON entry` : 'Free'}</option>`).join('');
+      fee.hidden = false;
+    }
+
     const set = (id, v) => { const n = el(id); if (n) n.textContent = v; };
     set('cfg-tasks', c.tasksToWin);
     set('cfg-surv', c.survivorsToEscape);
@@ -80,7 +88,7 @@ function lobbyCard(r) {
       </div>
       <div class="seats" title="${r.humans} of ${r.capacity} seats taken">${seats}</div>
       <div class="meta">
-        <span><b>${r.humans}</b>/${r.capacity} humans · ${r.capacity}-seat table</span>
+        <span><b>${r.humans}</b>/${r.capacity} humans · ${r.capacity}-seat table${r.entryFee > 0 ? ` · <b>${r.entryFee} MON</b> to enter` : ' · free'}</span>
         <span>${status}</span>
       </div>
       <a class="btn ${r.joinable ? 'btn-primary' : 'btn-ghost'}"
@@ -123,7 +131,11 @@ el('create').addEventListener('click', async () => {
     const res = await api('/rooms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, isPublic: true, players: Number(el('tablesize')?.value ?? 8) }),
+      body: JSON.stringify({
+        name, isPublic: true,
+        players: Number(el('tablesize')?.value ?? 8),
+        entryFee: Number(el('entryfee')?.value ?? 0),
+      }),
     }).then(r => r.json());
 
     if (!res.ok) throw new Error(res.error ?? 'Could not open a table');

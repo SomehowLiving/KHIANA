@@ -1,3 +1,4 @@
+import { parseEther, formatEther } from 'viem';
 import { CONFIG, TEAM, PHASE, rulesFor } from '../config.js';
 import { generateMaze, floorTiles, distance, isWalkable } from './maze.js';
 import { generateTasks, revealDueTasks, evaluateTasks } from './tasks.js';
@@ -268,6 +269,12 @@ function chainOpts(state) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/** Mirrors KhianaEscrow.release: fee = floor(amount × bps / 10000), in wei. */
+function afterBribeFee(amount) {
+  const wei = parseEther(String(amount));
+  return Number(formatEther(wei - (wei * BigInt(CONFIG.ECONOMY.BRIBE_FEE_BPS)) / 10_000n));
+}
+
 /** Register an in-flight settlement so endGame can wait for it. */
 function track(state, promise) {
   const p = promise.catch(err => console.error('settlement failed:', err));
@@ -289,7 +296,10 @@ function releaseBribe(state, commitment) {
     }
     entry.escrow = 'RELEASED';
     entry.releaseTx = res.txHash;
-    state.players[entry.to].agent.balance += entry.amount;
+    // The escrow keeps the platform's cut for the treasury.
+    const paid = res.paid ?? afterBribeFee(entry.amount);
+    entry.fee = Number((entry.amount - paid).toFixed(6));
+    state.players[entry.to].agent.balance += paid;
   }));
 }
 

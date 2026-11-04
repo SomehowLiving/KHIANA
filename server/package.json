@@ -16,7 +16,8 @@
     "phase1": "node scripts/phase1.mjs",
     "phase1:local": "node scripts/phase1-local.mjs",
     "playback": "node src/playback.js",
-    "game:onchain": "node scripts/onchain-game.mjs"
+    "game:onchain": "node scripts/onchain-game.mjs",
+    "pot:test": "node scripts/paid-table.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.1",

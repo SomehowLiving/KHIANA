@@ -87,8 +87,15 @@ async function main() {
   }
 
   const deployed = { KhianaCredit: credit };
+  // The platform's take: a cut of every released bribe (KHIA) and a rake on
+  // paid tables' entry fees (MON), both to TREASURY_ADDRESS (default: engine).
+  const treasury = process.env.TREASURY_ADDRESS || deployer.address;
+  const bribeFeeBps = Number(process.env.BRIBE_FEE_BPS ?? 500);
+  const rakeBps = Number(process.env.RAKE_BPS ?? 500);
+  console.log(`  treasury         ${treasury}   (bribe fee ${bribeFeeBps / 100}%, rake ${rakeBps / 100}%)`);
   for (const [label, name, args] of [
-    ['KhianaEscrow', 'KhianaEscrow', [deployer.address, credit]],
+    ['KhianaEscrow', 'KhianaEscrow', [deployer.address, credit, treasury, bribeFeeBps]],
+    ['KhianaPot', 'KhianaPot', [deployer.address, treasury, rakeBps]],
     ['RoleCommit', 'RoleCommit', []],
     ['PowerupShop', 'PowerupShop', [deployer.address, credit]],
   ]) {
@@ -112,6 +119,7 @@ async function main() {
     ESCROW_ADDRESS: await Escrow.getAddress(),
     COMMIT_ADDRESS: await Commit.getAddress(),
     SHOP_ADDRESS: await Shop.getAddress(),
+    POT_ADDRESS: deployed.KhianaPot,
   };
 
   // Written so the phase1 script and the ledger reveal can find the addresses
@@ -127,10 +135,11 @@ async function main() {
   console.log('ESCROW_ADDRESS=' + addresses.ESCROW_ADDRESS);
   console.log('COMMIT_ADDRESS=' + addresses.COMMIT_ADDRESS);
   console.log('SHOP_ADDRESS='   + addresses.SHOP_ADDRESS);
+  console.log('POT_ADDRESS='    + addresses.POT_ADDRESS);
 
   if (chainId === MONAD_TESTNET) {
     console.log('\nExplorer:');
-    for (const k of ['CREDIT_ADDRESS', 'ESCROW_ADDRESS', 'COMMIT_ADDRESS', 'SHOP_ADDRESS']) {
+    for (const k of ['CREDIT_ADDRESS', 'ESCROW_ADDRESS', 'COMMIT_ADDRESS', 'SHOP_ADDRESS', 'POT_ADDRESS']) {
       console.log(`  https://testnet.monadscan.com/address/${addresses[k]}`);
     }
     console.log('\nNext:  cd ../server && npm run x402 && npm run game:onchain\n');

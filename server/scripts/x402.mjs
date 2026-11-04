@@ -179,7 +179,10 @@ try {
     check('engine released on attestation', rel.ok === true, rel.ok ? rel.txHash?.slice(0, 18) + '…' : rel.error);
     if (rel.ok) {
       const moved = (await creditBalance(w.byId.p5.address)) - p5Before;
-      check('payee received the bribe only after release', Math.abs(moved - bribe) < 1e-9, `+${moved} KHIA`);
+      // The escrow keeps the platform's bribe fee; the rest is the payee's.
+      check('payee received the bribe (less the fee) only after release',
+        rel.paid != null && Math.abs(moved - rel.paid) < 1e-9 && rel.paid <= bribe,
+        `+${moved} KHIA of ${bribe}, fee ${(bribe - moved).toFixed(4)}`);
       console.log(`\n    ${explorer.tx(rel.txHash)}\n`);
     }
   }

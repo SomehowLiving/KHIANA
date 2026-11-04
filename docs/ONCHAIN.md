@@ -7,9 +7,10 @@ Everything money-related settles on **Monad testnet (chain 10143)** when `MOCK_C
 | Contract | Address | Source |
 |---|---|---|
 | KhianaCredit (KHIA) | [`0x8Fe5b8D00Fa11D0d6D3B842cCb68BC1CCd092284`](https://testnet.monadscan.com/address/0x8Fe5b8D00Fa11D0d6D3B842cCb68BC1CCd092284) | `contracts/contracts/KhianaCredit.sol` |
-| KhianaEscrow | [`0xD8205E7cB296b48f39b208e510fF4B92497Bf1E9`](https://testnet.monadscan.com/address/0xD8205E7cB296b48f39b208e510fF4B92497Bf1E9) | `KhianaEscrow.sol` |
-| PowerupShop | [`0xDD323c8570dB8554AAdfcF504e792f7f0Fdc647C`](https://testnet.monadscan.com/address/0xDD323c8570dB8554AAdfcF504e792f7f0Fdc647C) | `PowerupShop.sol` |
-| RoleCommit | [`0x8541613CCaaB40fb832F0F7DdE3B1A7abCe0021A`](https://testnet.monadscan.com/address/0x8541613CCaaB40fb832F0F7DdE3B1A7abCe0021A) | `RoleCommit.sol` |
+| KhianaEscrow | [`0x816ad71866EbA21BB5F69C04e39abB5f801b43c8`](https://testnet.monadscan.com/address/0x816ad71866EbA21BB5F69C04e39abB5f801b43c8) | `KhianaEscrow.sol` |
+| PowerupShop | [`0x3900A7C4C0a08572394F791242157B8A28B8dBE4`](https://testnet.monadscan.com/address/0x3900A7C4C0a08572394F791242157B8A28B8dBE4) | `PowerupShop.sol` |
+| KhianaPot | [`0x9f7010f2A550A69d8307f4A2dA395992633C51DE`](https://testnet.monadscan.com/address/0x9f7010f2A550A69d8307f4A2dA395992633C51DE) | `KhianaPot.sol` |
+| RoleCommit | [`0xDE90658F579F618b3ccF16319b0F28113bccFD67`](https://testnet.monadscan.com/address/0xDE90658F579F618b3ccF16319b0F28113bccFD67) | `RoleCommit.sol` |
 
 Engine wallet: [`0x2acfF541cf34B190276eB65a082cB16378aDF9D8`](https://testnet.monadscan.com/address/0x2acfF541cf34B190276eB65a082cB16378aDF9D8)
 
@@ -21,9 +22,16 @@ Engine wallet: [`0x2acfF541cf34B190276eB65a082cB16378aDF9D8`](https://testnet.mo
 
 ### KhianaEscrow
 - `lockWithAuthorization(payer, payee, value, …, signature, condition, ttl)`: pulls the payer's signed KHIA into the contract and records the bribe, in one call. `condition` is a hash of the instruction.
-- `release(id)`: **engine only**. Pays the payee.
+- `release(id)`: **engine only**. Pays the payee, minus the **bribe fee** (`BRIBE_FEE_BPS`, default 5%) which goes to the treasury. Refunds are never charged.
 - `refund(id)`: **anyone**, after the TTL. Returns money to the payer, so a stalled engine can't trap funds.
 - The trust caveat: the engine decides whether a bribe was delivered. What the chain guarantees is that payments can't be faked, reversed or erased afterwards.
+
+### KhianaPot (paid tables, real MON)
+- KHIA is the in-game chip; **the pot is what players actually risk**, in native MON from their own wallet.
+- `open(game, fee, deadline)`: engine opens a pot for one game. `enter(game)`: a player pays exactly the fee, once.
+- `settle(game, winners)`: engine only. Rake (`RAKE_BPS`, default 5%) to the treasury; the rest split evenly between `winners`, who must all have entered. With no winners, every entrant gets their fee back minus the rake.
+- `cancel(game)`: full refunds. The engine any time; **anyone** after the deadline (3 hours), so fees can't be trapped.
+- A payout a wallet can't receive is kept in `owed` and claimable with `withdraw()`.
 
 ### PowerupShop
 - `buyWithAuthorization(buyer, value, …, powerup, gameTick)`: pulls the signed KHIA and **burns** it. Records every purchase; `totalBurned` is public.
@@ -90,20 +98,34 @@ The game keeps its own balances in memory so it never waits on the chain to make
 - Payments still in flight are tracked; the payout waits for them.
 - Only the `MAIN` room is live. If staking fails at start, that game runs in mock mode and `/health` shows `onChain: false` with the reason.
 
-## 6. Proving it
+## 6. Platform revenue
+
+| Source | Rate | Paid in | Contract |
+|---|---|---|---|
+| Rake on paid tables | 5% of the pot (`RAKE_BPS`) | MON | KhianaPot |
+| Bribe fee | 5% of every released bribe (`BRIBE_FEE_BPS`) | KHIA | KhianaEscrow |
+
+Both go to `TREASURY_ADDRESS` (default: the engine), are fixed at deploy, and are capped at 20% in the contracts. The engine reads what a bribe actually paid from the escrow's `Released` event, so its books always match.
+
+## 7. Proving it
 
 ```bash
 cd server
 npm run x402          # every payment type, 22 checks
 npm run game:onchain  # a full game, then the game's books vs the chain
 npm run phase1        # deployment + settlement acceptance
+npm run pot:test      # a paid table with two real player wallets
 ```
 
 `game:onchain` passes only if: every in-game payment has a transaction, every escrow is closed, supply fell by exactly what was burned, and every advisor's wallet equals the game's figure to the unit. `GET /proof` shows the same evidence live.
 
 Last testnet run: `x402` 22/22, `game:onchain` 11/11.
 
-## 7. Deploying fresh
+`pot:test` funds two throwaway wallets, checks that unpaid, forged and wallet-less joins are refused, has both pay and sit at a 4-seat paid table, plays it out, and checks the rake and payout to the wei.
+
+Last testnet run: `x402` 22/22, `game:onchain` 11/11, `pot:test` 17/17.
+
+## 8. Deploying fresh
 
 1. `.env`: set `AGENT_MNEMONIC`; optionally `KHIA_SUPPLY`.
 2. Fund the engine with ~5 MON (`npm run wallets` shows the address; faucet: https://faucet.monad.xyz).

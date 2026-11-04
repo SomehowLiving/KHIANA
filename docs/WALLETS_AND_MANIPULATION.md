@@ -12,10 +12,11 @@ Two questions this page answers: **who holds the money**, and **how one player g
 |---|---|---|---|
 | Engine | 1 | MON for gas + the KHIA treasury | The server |
 | Advisor | 8 (`p1`–`p8`) | KHIA, staked 5 per game | The server |
-| Human player | **none** | – | – |
+| Human player | their own, **only at paid tables** | MON for the entry fee | The player (MetaMask etc.) |
 
 - A wallet belongs to a **seat**, not a person. Whoever sits in seat `p3` (a human or a bot) is advised by the advisor that owns wallet `p3`.
-- Humans never connect a wallet, never sign anything, never pay gas. They just walk.
+- At **free tables** humans never connect a wallet. They just walk.
+- At **paid tables** a player connects their own wallet, pays the MON entry fee into KhianaPot, and signs a message proving the wallet is theirs. Winnings go straight back to that wallet. Their seat's *advisor* is still a server wallet playing with KHIA.
 - The wallets are the same every game, because they're derived from one secret in `.env`.
 
 ### Where the keys come from (`server/src/economy/wallets.js`)
@@ -64,7 +65,7 @@ The wallets are **custodial**: the server holds every key. That keeps the game p
 | Teams were fixed before the first move (RoleCommit) | Keeping the commit salt secret until the end |
 | Anyone can refund an expired escrow, so funds can't be stuck | |
 
-This is fine for a testnet game. Letting players bring their own wallets would be the next step to remove that trust.
+Players' real money (paid-table entry fees) never touches a server-held wallet: it sits in KhianaPot, can only go to entrants or the treasury's rake, and anyone can force refunds after the deadline. The KHIA chips are still custodial.
 
 ---
 

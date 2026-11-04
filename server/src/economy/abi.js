@@ -209,3 +209,28 @@ export const COMMIT_ABI = [
     ],
   },
 ];
+
+/** KhianaPot — paid-table entry fees in native MON. */
+export const POT_ABI = [
+  { type: 'function', name: 'open', stateMutability: 'nonpayable',
+    inputs: [{ name: 'game', type: 'bytes32' }, { name: 'fee', type: 'uint256' }, { name: 'deadline', type: 'uint64' }], outputs: [] },
+  { type: 'function', name: 'enter', stateMutability: 'payable',
+    inputs: [{ name: 'game', type: 'bytes32' }], outputs: [] },
+  { type: 'function', name: 'settle', stateMutability: 'nonpayable',
+    inputs: [{ name: 'game', type: 'bytes32' }, { name: 'winners', type: 'address[]' }], outputs: [] },
+  { type: 'function', name: 'cancel', stateMutability: 'nonpayable',
+    inputs: [{ name: 'game', type: 'bytes32' }], outputs: [] },
+  { type: 'function', name: 'entered', stateMutability: 'view',
+    inputs: [{ name: 'game', type: 'bytes32' }, { name: 'who', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'rakeBps', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint16' }] },
+  { type: 'function', name: 'get', stateMutability: 'view',
+    inputs: [{ name: 'game', type: 'bytes32' }],
+    outputs: [
+      { name: 'fee', type: 'uint256' }, { name: 'total', type: 'uint256' }, { name: 'deadline', type: 'uint64' },
+      { name: 'isOpen', type: 'bool' }, { name: 'isClosed', type: 'bool' }, { name: 'entrants', type: 'uint256' },
+    ] },
+  { type: 'event', name: 'Settled', inputs: [
+    { name: 'game', type: 'bytes32', indexed: true }, { name: 'winners', type: 'address[]', indexed: false },
+    { name: 'share', type: 'uint256', indexed: false }, { name: 'rake', type: 'uint256', indexed: false },
+  ] },
+];

@@ -43,6 +43,8 @@ See `docs/POWERUPS.md`. Briefly: bribery cheaper than Freeze; Audit dearer than 
 ## [Unreleased]
 
 ### Added
+- **Paid tables with Connect Wallet.** A lobby can charge an entry fee in MON (0.01 or 0.1). Players connect their own browser wallet, pay into the new `KhianaPot` contract, and sign a message to claim their seat; the server checks both on chain before seating. Surviving paying winners split the pot; if none won, entrants are refunded. Anyone can force full refunds after the pot's deadline. `npm run pot:test`: 17/17 on Monad testnet. [Phase 9]
+- **Platform revenue.** A 5% rake on paid-table pots (MON) and a 5% fee on every released bribe (KHIA), both to `TREASURY_ADDRESS` and capped at 20% in the contracts. [Phase 9]
 - **4-player tables.** Each lobby chooses 4 or 8 seats when opened; the main table stays 8. A 4-seat game has 1 Saboteur, Saboteurs win at ≤1 Loyalist alive, 2 escape, CONVERGE needs 3 tiles, and the maze is 10×10. Staking and payout cover only the seats in play. Verified: a 4-seat game on Monad testnet passes `game:onchain` 11/11. [Phase 8]
 - `npm run game:onchain` — plays a full bot game on chain, then proves the books balance: every ledger entry has a transaction, every escrow closed, supply fell by exactly what was burned, and every agent wallet equals the engine's balance to the unit. Wired into `khiana.sh verify`. [Phase 1]
 - Agents are staked exactly `STARTING_MON` KHIA on chain before every live game, from the engine treasury (`economy/stakes.js`). Without this a second game started from whatever the first left behind. [Phase 1]

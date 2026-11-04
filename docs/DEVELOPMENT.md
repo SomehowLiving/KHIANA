@@ -47,6 +47,7 @@ With no keys at all, the game runs fully: mock chain, scripted advisors.
 | `npm run x402` | server | yes |
 | `npm run game:onchain` | server | yes |
 | `npm run phase1` | server | yes |
+| `npm run pot:test` | server | yes |
 
 ### Testing on-chain without testnet funds
 
@@ -91,6 +92,9 @@ Don't go below 1000ms: Hardhat timestamps advance at least 1s per block, so fast
 | `MAZE_SIZE`, `PLAYERS`, `SABOTEURS`, `TASKS_TO_WIN`, `VISION_RADIUS` | 24, 8, 2, 5, 2 | Game shape. |
 | `MAX_POWERUPS_PER_GAME` | 3 | Per advisor. |
 | `MAZE_SIZE_4` | 10 | Maze size for 4-player tables. |
+| `TREASURY_ADDRESS` | engine | Where the rake and bribe fees go (deploy time). |
+| `RAKE_BPS`, `BRIBE_FEE_BPS` | 500, 500 | Platform cuts, 500 = 5% (deploy time; keep `BRIBE_FEE_BPS` in `.env` in step). |
+| `POT_ADDRESS` | – | KhianaPot, from the deploy. Paid tables are offered only when this is set and the chain is live. |
 | `RECORD` | false | Save the game for playback. |
 
 Prices and economy rules are in `server/src/config.js` (`ECONOMY`, `POWERUPS`).

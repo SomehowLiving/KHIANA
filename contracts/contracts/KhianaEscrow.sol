@@ -65,6 +65,9 @@ contract KhianaEscrow {
 
     IERC20  public immutable token;
     address public immutable engine;
+    /// The platform's cut of every released bribe. Refunds are never charged.
+    address public immutable treasury;
+    uint16  public immutable feeBps;      // 500 = 5%
     uint256 public nextId;
     mapping(uint256 => Bribe) public bribes;
 
@@ -76,15 +79,19 @@ contract KhianaEscrow {
     error NotOpen();
     error NotExpired();
     error ZeroAmount();
+    error FeeTooHigh();
 
     modifier onlyEngine() {
         if (msg.sender != engine) revert NotEngine();
         _;
     }
 
-    constructor(address _engine, address _token) {
+    constructor(address _engine, address _token, address _treasury, uint16 _feeBps) {
+        if (_feeBps > 2000) revert FeeTooHigh();   // never more than 20%
         engine = _engine;
         token = IERC20(_token);
+        treasury = _treasury;
+        feeBps = _feeBps;
     }
 
     /**
@@ -150,8 +157,10 @@ contract KhianaEscrow {
         Bribe storage b = bribes[id];
         if (b.status != Status.Open) revert NotOpen();
         b.status = Status.Released;
-        emit Released(id, b.payee, b.amount);
-        require(token.transfer(b.payee, b.amount), "transfer failed");
+        uint256 fee = (b.amount * feeBps) / 10_000;
+        emit Released(id, b.payee, b.amount - fee);
+        require(token.transfer(b.payee, b.amount - fee), "transfer failed");
+        if (fee > 0) require(token.transfer(treasury, fee), "fee transfer failed");
     }
 
     /// @notice After expiry, anyone can return the funds to the payer.

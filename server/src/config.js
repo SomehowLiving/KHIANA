@@ -58,6 +58,7 @@ export const CONFIG = {
     CREDIT_ADDRESS: process.env.CREDIT_ADDRESS ?? '',
     ESCROW_ADDRESS: process.env.ESCROW_ADDRESS ?? '',
     SHOP_ADDRESS: process.env.SHOP_ADDRESS ?? '',
+    POT_ADDRESS: process.env.POT_ADDRESS ?? '',
     COMMIT_ADDRESS: process.env.COMMIT_ADDRESS ?? '',
   },
 
@@ -103,6 +104,12 @@ export const CONFIG = {
     STARTING_MON: 5.0,
     CONTACT_FEE: 0.25,          // paid TO the recipient, not burned
     MIN_BRIBE: 0.10,
+    // Must match the deployed KhianaEscrow: the platform's cut of every
+    // released bribe, in basis points (500 = 5%). Read by the engine so its
+    // books match what the contract pays out.
+    BRIBE_FEE_BPS: Number(process.env.BRIBE_FEE_BPS ?? 500),
+    // Paid tables: entry fees offered in the lobby, in MON. 0 = free.
+    ENTRY_FEES: [0, 0.01, 0.1],
 
     // docs/POWERUPS.md invariant #3: "No agent affords more than 3 powerups
     // per game." Prices alone don't enforce it — WHISPER at 0.50 means a
