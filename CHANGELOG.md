@@ -43,6 +43,8 @@ See `docs/POWERUPS.md`. Briefly: bribery cheaper than Freeze; Audit dearer than 
 ## [Unreleased]
 
 ### Added
+- **Deployed.** Game on Vercel (https://khiana-gold.vercel.app), spectator on Vercel (https://khiana-spectator.vercel.app), server on Railway (root `server/`, health check `/health`). Steps in `docs/DEVELOPMENT.md`.
+- **Gemini and OpenAI as model providers** (`LLM_PROVIDER=gemini|openai`), through the existing OpenAI-compatible client. `LLM_RPM` caps model calls per minute so a free tier's limit sends extra advisors to the scripted brain instead of to a 429. Failed calls now record why in `/health`. [Phase 9]
 - **Paid tables with Connect Wallet.** A lobby can charge an entry fee in MON (0.01 or 0.1). Players connect their own browser wallet, pay into the new `KhianaPot` contract, and sign a message to claim their seat; the server checks both on chain before seating. Surviving paying winners split the pot; if none won, entrants are refunded. Anyone can force full refunds after the pot's deadline. `npm run pot:test`: 17/17 on Monad testnet. [Phase 9]
 - **Platform revenue.** A 5% rake on paid-table pots (MON) and a 5% fee on every released bribe (KHIA), both to `TREASURY_ADDRESS` and capped at 20% in the contracts. [Phase 9]
 - **4-player tables.** Each lobby chooses 4 or 8 seats when opened; the main table stays 8. A 4-seat game has 1 Saboteur, Saboteurs win at ≤1 Loyalist alive, 2 escape, CONVERGE needs 3 tiles, and the maze is 10×10. Staking and payout cover only the seats in play. Verified: a 4-seat game on Monad testnet passes `game:onchain` 11/11. [Phase 8]
@@ -54,6 +56,7 @@ See `docs/POWERUPS.md`. Briefly: bribery cheaper than Freeze; Audit dearer than 
 - `server/integration.test.mjs` — spawns the server, connects a player and a spectator, asserts the information boundary, tears down. Run after any change to `fog.js` or `index.js`. **19/19 passing.** [Phase 0]
 
 ### Fixed
+- Some models open briefings with a list marker ("0. Move forward…"); it is now stripped before the briefing reaches the player. [Phase 9]
 - **Escrowed bribes were never released.** Nothing called `releaseEscrow`, so on chain every bribe sat in custody until it refunded to the payer, while the game credited the taker immediately. The engine now releases when the bought briefing goes out and refunds bribes that lapse undelivered; the taker is credited only on release. [Phase 1]
 - **Failed payments still moved money in the game.** A contact fee or bribe whose transaction failed was booked anyway, so the ledger drifted from the chain. Balances are now reserved before a payment and restored if it fails. [Phase 1]
 - **An LLM agent could take money that was never offered.** Accepts were executed exactly as the accepting agent wrote them: any payer, any amount. They must now match a real, unaccepted offer in the agent's inbox, on that offer's terms. Accepting a counter-offer also charged the wrong side; it now charges the agent that accepts. [Phase 1]

@@ -49,6 +49,12 @@ With no keys at all, the game runs fully: mock chain, scripted advisors.
 | `npm run phase1` | server | yes |
 | `npm run pot:test` | server | yes |
 
+`game.test` and `integration.test` read the root `.env`. If it's set up for live play (chain or model keys), run them in mock mode so slow model calls don't skew the timing checks:
+
+```bash
+MOCK_CHAIN=true GEMINI_API_KEY= GROQ_API_KEY= node integration.test.mjs
+```
+
 ### Testing on-chain without testnet funds
 
 Use a local Hardhat chain:
@@ -81,7 +87,8 @@ Don't go below 1000ms: Hardhat timestamps advance at least 1s per block, so fast
 | Key | Default | Meaning |
 |---|---|---|
 | `GROQ_API_KEY` / `ANTHROPIC_API_KEY` | – | Model key. Without one, advisors use the scripted brain. |
-| `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | groq, llama-3.3-70b | Which model. |
+| `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | groq | `groq`, `anthropic`, `gemini` (default model `gemini-3.5-flash-lite`) or `openai` (`gpt-4.1-mini`). Each reads its own key: `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`. |
+| `LLM_RPM` | 0 | Cap on model calls per minute. Calls past it use the scripted brain without calling the model. Set it below a free tier's limit (Gemini free: 15/min → 14). |
 | `MOCK_CHAIN` | true | `false` = settle on Monad. |
 | `MONAD_RPC_URL`, `CHAIN_ID` | testnet, 10143 | Which chain. |
 | `AGENT_MNEMONIC` | – | 12 words or a private key; derives all wallets. Testnet only. |
@@ -112,6 +119,27 @@ Prices and economy rules are in `server/src/config.js` (`ECONOMY`, `POWERUPS`).
 | Change payments / contracts | `server/src/economy/`, `contracts/contracts/` (see [ONCHAIN.md](ONCHAIN.md)) |
 | Change the 3D look | `client/src/scene.js`, `character.js` |
 | Change the spectator screen | `spectator/src/main.js` |
+
+## Deployment
+
+| Part | Host | URL |
+|---|---|---|
+| Landing + game (`client/`) | Vercel, project `khiana` | https://khiana-gold.vercel.app |
+| Spectator (`spectator/`) | Vercel, project `khiana-spectator` | https://khiana-spectator.vercel.app |
+| Game server (`server/`) | Railway, service `KHIANA` | https://khiana-production-e696.up.railway.app |
+
+The server can't run on Vercel: it holds WebSocket connections and runs a tick loop, so it needs a long-lived process.
+
+**Server (Railway).** The service's root directory is `server/`, start command `node src/index.js`, health check `/health`. Its variables are the `.env` values except `PORT` (Railway sets it). It redeploys on every push to `main`. To deploy local code without pushing: `railway up --service KHIANA` from the repo root (`.railwayignore` keeps `.env` and the frontends out of the upload).
+
+**Frontends (Vercel).** The server address is baked in at build time:
+```bash
+S=https://khiana-production-e696.up.railway.app
+cd spectator && vercel deploy --prod -b VITE_WS_URL=wss://${S#https://} -b VITE_API_URL=$S
+cd client    && vercel deploy --prod -b VITE_WS_URL=wss://${S#https://} -b VITE_API_URL=$S \
+                  -b VITE_SPECTATOR_URL=https://khiana-spectator.vercel.app
+```
+`khiana.vercel.app` belongs to another account, so the game is on `khiana-gold.vercel.app`; add a custom domain in the Vercel project's Settings → Domains.
 
 ## House rules
 

@@ -10,5 +10,8 @@
     "server": "cd server && npm run dev",
     "client": "cd client && npm run dev",
     "spectator": "cd spectator && npm run dev"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

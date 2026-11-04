@@ -1,4 +1,4 @@
-import { CONFIG } from '../config.js';
+import { CONFIG, LLM_KEYS } from '../config.js';
 
 /**
  * Provider-agnostic model wrapper with a hard timeout.
@@ -38,21 +38,21 @@ export const llmStats = {
   recent: [],          // rolling window of the last few calls
 };
 
-function recordCall(ms, ok, kind) {
+function recordCall(ms, ok, kind, error = null) {
   llmStats.calls++;
   if (!ok) llmStats.failures++;
   llmStats.totalMs += ms;
   llmStats.lastMs = ms;
   llmStats.lastAt = new Date().toISOString();
   llmStats.lastModel = MODEL;
-  llmStats.recent.unshift({ ms, ok, kind, at: llmStats.lastAt });
+  // Why a call failed (rate limit, timeout, bad key…) — a failure count alone
+  // can't tell a demo-breaking quota from one slow call.
+  llmStats.recent.unshift({ ms, ok, kind, at: llmStats.lastAt, ...(error ? { error: String(error).slice(0, 160) } : {}) });
   if (llmStats.recent.length > 12) llmStats.recent.pop();
 }
 
 function apiKey() {
-  return PROVIDER === 'anthropic'
-    ? process.env.ANTHROPIC_API_KEY
-    : process.env.GROQ_API_KEY;
+  return process.env[LLM_KEYS[PROVIDER] ?? 'GROQ_API_KEY'];
 }
 
 export function providerStatus() {
@@ -80,9 +80,31 @@ export function providerStatus() {
  * @param {number}  timeoutMs abort budget
  * @param {boolean} json      ask the provider to guarantee parseable JSON
  */
+/**
+ * Optional request budget: LLM_RPM calls per rolling minute, 0 = unlimited.
+ *
+ * Free tiers cap requests per minute (Gemini: 15 per model) far below the
+ * ~32 a full 8-agent game asks for. Past the budget a call fails here, at
+ * once, and the agent plays its scripted brain for the tick — instead of
+ * spending a round trip to be refused, and having the refusal count against
+ * the quota too.
+ */
+const RPM = Number(process.env.LLM_RPM ?? 0);
+const recentStarts = [];
+
+function overBudget() {
+  if (!RPM) return false;
+  const now = Date.now();
+  while (recentStarts.length && now - recentStarts[0] > 60_000) recentStarts.shift();
+  if (recentStarts.length >= RPM) return true;
+  recentStarts.push(now);
+  return false;
+}
+
 export async function callModel({ system, user, maxTokens = 300, timeoutMs = 8000, json = false }) {
   const key = apiKey();
   if (!key) throw new Error(`No ${PROVIDER} API key — using fallback brain`);
+  if (overBudget()) throw new Error(`LLM_RPM budget of ${RPM}/min spent — using fallback brain`);
 
   // AbortController rather than a dangling Promise.race: a raced-away fetch
   // keeps running and, with 8 agents a tick for 40 ticks, those add up into
@@ -98,7 +120,8 @@ export async function callModel({ system, user, maxTokens = 300, timeoutMs = 800
     recordCall(Date.now() - t0, true, json ? 'decision' : 'briefing');
     return out;
   } catch (err) {
-    recordCall(Date.now() - t0, false, json ? 'decision' : 'briefing');
+    recordCall(Date.now() - t0, false, json ? 'decision' : 'briefing',
+      err?.name === 'AbortError' ? `timeout after ${timeoutMs}ms` : err?.message);
     throw err;
   } finally {
     clearTimeout(timer);

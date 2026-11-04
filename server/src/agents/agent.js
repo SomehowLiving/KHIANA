@@ -342,6 +342,9 @@ function parseActions(raw, agent, state, ctx) {
 
 /** Hard cap on briefing length. A rambling advisor kills the pace. */
 export function clampSentences(text, max) {
-  const parts = String(text).match(/[^.!?]+[.!?]*/g) ?? [text];
+  // Some models open with a list marker ("0. Move forward…", "1) Turn…"),
+  // which the sentence split below would keep as a sentence of its own.
+  const cleaned = String(text).replace(/^\s*(?:\d+[.)]\s*)+/, '');
+  const parts = cleaned.match(/[^.!?]+[.!?]*/g) ?? [cleaned];
   return parts.slice(0, max).join(' ').trim();
 }

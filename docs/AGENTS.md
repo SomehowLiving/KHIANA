@@ -122,7 +122,9 @@ Runs when there's no API key, when a model call fails, and in tests. It plays a 
 
 ## 9. The model connection (`agents/llm.js`)
 
-- Provider set by `LLM_PROVIDER`: `groq` (default, `llama-3.3-70b-versatile`) or `anthropic`. Any OpenAI-compatible endpoint works via `LLM_BASE_URL`.
+- Provider set by `LLM_PROVIDER`: `groq` (default), `anthropic`, `gemini` or `openai`. Gemini and OpenAI use the same OpenAI-compatible client as Groq. Any other compatible endpoint works via `LLM_BASE_URL`.
+- **Free tiers can't run every advisor every tick.** A full game wants ~32 calls a minute (Groq free: 8,000 tokens/min; Gemini free: 15 requests/min). `LLM_RPM` caps calls per minute; advisors past the cap play the scripted brain that tick.
+- Failed calls are logged with their reason (rate limit, timeout…) in `/health` and `/proof`.
 - All advisors call in parallel, each with an 8s timeout (`DELIBERATION_TIMEOUT_MS`). A slow advisor just does nothing that tick.
 - JSON mode is requested where supported.
 - Every call is counted with its latency; `/proof` shows the counts so anyone can see the model is really being called.

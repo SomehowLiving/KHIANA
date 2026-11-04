@@ -26,10 +26,22 @@ dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 const DEFAULT_MODELS = {
   groq: 'llama-3.3-70b-versatile',
   anthropic: 'claude-sonnet-4-6',
+  // Gemini and OpenAI speak the OpenAI chat-completions format, so they run
+  // through the same client as Groq with a different key and base URL.
+  gemini: 'gemini-3.5-flash-lite',
+  openai: 'gpt-4.1-mini',
+};
+
+const DEFAULT_BASE_URLS = {
+  groq: 'https://api.groq.com/openai/v1',
+  gemini: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  openai: 'https://api.openai.com/v1',
 };
 
 const LLM_PROVIDER = (process.env.LLM_PROVIDER ?? 'groq').toLowerCase();
-const LLM_KEYS = { groq: 'GROQ_API_KEY', anthropic: 'ANTHROPIC_API_KEY' };
+export const LLM_KEYS = {
+  groq: 'GROQ_API_KEY', anthropic: 'ANTHROPIC_API_KEY', gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY',
+};
 const LLM_KEY_PRESENT = Boolean(process.env[LLM_KEYS[LLM_PROVIDER] ?? 'GROQ_API_KEY']);
 
 export const CONFIG = {
@@ -201,7 +213,7 @@ export const CONFIG = {
     // pressure that otherwise pushes you into under-prompting the agents.
     PROVIDER: LLM_PROVIDER,
     MODEL: process.env.LLM_MODEL ?? DEFAULT_MODELS[LLM_PROVIDER] ?? DEFAULT_MODELS.groq,
-    BASE_URL: process.env.LLM_BASE_URL ?? 'https://api.groq.com/openai/v1',
+    BASE_URL: process.env.LLM_BASE_URL ?? DEFAULT_BASE_URLS[LLM_PROVIDER] ?? DEFAULT_BASE_URLS.groq,
     JSON_MODE: process.env.LLM_JSON_MODE !== 'false',
 
     BRIEF_MAX_TOKENS: Number(process.env.BRIEF_MAX_TOKENS ?? 150),
