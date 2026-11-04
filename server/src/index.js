@@ -1,23 +1,24 @@
 import express from 'express';
+import { mountTts } from './tts.js';
+import { setFlashlight } from './game/flashlight.js';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 
-import { isAddress, verifyMessage } from 'viem';
-import { CONFIG, TABLE_SIZES, rulesFor } from './config.js';
-import { hasEntered, joinMessage, potAvailable } from './economy/pot.js';
+import { CONFIG } from './config.js';
 import { checkFacilitator } from './economy/x402.js';
 import { mountX402 } from './economy/x402-server.js';
 import { providerStatus } from './agents/llm.js';
 import {
   createRoom, getRoom, publicRooms, roomSummary, allRooms,
   attach, detach, seatPlayer, pushState, broadcast, movePlayerIn,
-  startRoom, finishRoom, resetRoom, closeRoom, startReaper, startAutoStarter, isHost, canStart, humanCount,
+  startRoom, finishRoom, resetRoom, closeRoom, startReaper, startAutoStarter, startClockWatch, isHost, canStart, humanCount,
 } from './rooms.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+mountTts(app);
 
 const http = createServer(app);
 const wss = new WebSocketServer({ server: http });
@@ -31,14 +32,11 @@ const wss = new WebSocketServer({ server: http });
  * code and the unprefixed routes operate on it.
  */
 const DEFAULT_CODE = 'MAIN';
-// The only room that settles on chain: every room shares one set of agent
-// wallets, so a second live room would spend from the same balances.
-const defaultRoom = createRoom({
-  name: 'Main table', isPublic: true, code: DEFAULT_CODE, onChain: !CONFIG.MOCK_CHAIN,
-});
+const defaultRoom = createRoom({ name: 'Main table', isPublic: true, code: DEFAULT_CODE });
 
 startReaper();
 startAutoStarter();
+startClockWatch();
 
 /** Resolve :code / ?room= / body.room, falling back to the main table. */
 function resolveRoom(req) {
@@ -56,10 +54,6 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     mockChain: CONFIG.MOCK_CHAIN,
-    // What the current main-table game is actually doing. Differs from
-    // mockChain when staking failed at start and the game fell back.
-    onChain: defaultRoom.game.onChain,
-    ...(defaultRoom.game.chainError ? { chainError: defaultRoom.game.chainError } : {}),
     mockLLM: CONFIG.MOCK_LLM,
     tick: defaultRoom.game.tick,
     phase: defaultRoom.game.phase,
@@ -81,11 +75,6 @@ app.get('/config', (_req, res) => {
   res.json({
     players: CONFIG.GAME.PLAYERS,
     saboteurs: CONFIG.GAME.SABOTEURS,
-    // Lobbies choose a size; these are the rules each size plays by.
-    tableSizes: TABLE_SIZES.map(n => {
-      const r = rulesFor(n);
-      return { players: n, saboteurs: r.SABOTEURS, survivorsToEscape: r.SURVIVORS_TO_ESCAPE, mazeSize: r.MAZE_SIZE };
-    }),
     tasksToWin: CONFIG.GAME.TASKS_TO_WIN,
     totalTicks: CONFIG.GAME.TOTAL_TICKS,
     tickSeconds: CONFIG.GAME.TICK_MS / 1000,
@@ -100,11 +89,6 @@ app.get('/config', (_req, res) => {
     })),
     mockChain: CONFIG.MOCK_CHAIN,
     explorer: CONFIG.CHAIN.EXPLORER,
-    // Paid tables: offered only when the server is live with a deployed pot.
-    paidTables: potAvailable(),
-    entryFees: potAvailable() ? CONFIG.ECONOMY.ENTRY_FEES : [0],
-    chainId: CONFIG.CHAIN.CHAIN_ID,
-    rpcUrl: CONFIG.CHAIN.RPC_URL,
   });
 });
 
@@ -125,8 +109,7 @@ app.get('/proof', (_req, res) => {
     llm: providerStatus(),
 
     chain: {
-      mode: g.onChain ? 'LIVE' : 'MOCK',
-      ...(g.chainError ? { error: g.chainError } : {}),
+      mode: CONFIG.MOCK_CHAIN ? 'MOCK' : 'LIVE',
       chainId: CONFIG.CHAIN.CHAIN_ID,
       explorer: CONFIG.CHAIN.EXPLORER,
       contracts: {
@@ -143,8 +126,7 @@ app.get('/proof', (_req, res) => {
       settlements: settled.slice(-25).reverse().map(e => ({
         tick: e.tick, kind: e.kind, from: e.from, to: e.to, amount: e.amount,
         txHash: e.txHash,
-        url: g.onChain ? `${CONFIG.CHAIN.EXPLORER}/tx/${e.txHash}` : null,
-        ...(e.escrow ? { escrow: e.escrow, releaseTx: e.releaseTx, refundTx: e.refundTx } : {}),
+        url: CONFIG.MOCK_CHAIN ? null : `${CONFIG.CHAIN.EXPLORER}/tx/${e.txHash}`,
       })),
       totals: {
         contacts: ledger.filter(e => e.kind === 'CONTACT').length,
@@ -173,17 +155,6 @@ app.get('/proof', (_req, res) => {
     },
 
     game: { tick: g.tick, phase: g.phase, started: g.started, winner: g.winner },
-
-    /**
-     * The engine's view of every agent's KHIA. Once no settlement is in
-     * flight these must equal the on-chain balances exactly — that is the
-     * check `npm run game:onchain` makes, and anyone can repeat it against
-     * the token contract.
-     */
-    balances: Object.fromEntries(
-      Object.values(g.players).map(p => [p.id, Number(p.agent.balance.toFixed(6))])
-    ),
-    inFlight: g.chainOps?.size ?? 0,
   });
 });
 
@@ -198,8 +169,6 @@ app.post('/rooms', (req, res) => {
       isPublic: req.body?.isPublic !== false,
       hostName: req.body?.hostName,
       seed: req.body?.seed,
-      players: req.body?.players,
-      entryFee: req.body?.entryFee,
     });
     res.json({ ok: true, room: roomSummary(room) });
   } catch (err) {
@@ -250,29 +219,6 @@ app.get('/game/reveal', (req, res) => {
  */
 mountX402(app, () => defaultRoom.game);
 
-/**
- * A paid seat needs two proofs: the wallet signed this game's join message,
- * so nobody can sit in a seat someone else paid for, and the pot contract
- * shows that wallet paid. Winnings go to that same address.
- */
-async function verifyPaidEntry(room, msg) {
-  const pot = room.pot;
-  if (pot.status !== 'open') {
-    return { ok: false, error: `This table's pot is ${pot.status}. Try again in a moment.` };
-  }
-  if (!isAddress(msg.wallet ?? '') || !msg.signature) {
-    return { ok: false, error: `Connect a wallet and pay the ${pot.fee} MON entry fee to sit here.` };
-  }
-  const signed = await verifyMessage({
-    address: msg.wallet, message: joinMessage(pot.gameId), signature: msg.signature,
-  }).catch(() => false);
-  if (!signed) return { ok: false, error: 'Wallet signature did not match.' };
-  if (!(await hasEntered(pot.gameId, msg.wallet))) {
-    return { ok: false, error: `No entry fee from this wallet yet. Pay ${pot.fee} MON first.` };
-  }
-  return { ok: true, address: msg.wallet };
-}
-
 // ── WebSocket ───────────────────────────────────────────────────────────────
 
 wss.on('connection', (ws, req) => {
@@ -306,26 +252,7 @@ wss.on('connection', (ws, req) => {
 
     switch (msg.type) {
       case 'JOIN': {
-        // Paid tables: a returning seat (token) is let straight back in;
-        // anyone new must prove they own a wallet that paid this game's pot.
-        const returning = msg.token && room.seatTokens.has(msg.token);
-        if (room.pot && !returning) {
-          verifyPaidEntry(room, msg).then(wallet => {
-            if (!wallet.ok) return send(ws, { type: 'ERROR', context: 'PAY', error: wallet.error });
-            join(wallet.address);
-          }).catch(err => send(ws, { type: 'ERROR', context: 'PAY', error: String(err?.message ?? err) }));
-          break;
-        }
-        join(null);
-        break;
-      }
-
-      default:
-        break;
-    }
-
-    function join(wallet) {
-        const r = seatPlayer(room, ws, { name: msg.name, token: msg.token, playerId: msg.playerId, wallet });
+        const r = seatPlayer(room, ws, { name: msg.name, token: msg.token, playerId: msg.playerId });
         if (r.error) return send(ws, { type: 'ERROR', error: r.error });
         send(ws, {
           type: 'JOINED',
@@ -336,9 +263,9 @@ wss.on('connection', (ws, req) => {
         });
         pushState(room, ws);
         broadcast(room);   // the roster changed for everyone watching
-    }
+        break;
+      }
 
-    switch (msg.type) {
       case 'SPECTATE':
         room.sockets.set(ws, { role: 'spectator', playerId: null });
         pushState(room, ws);
@@ -401,6 +328,22 @@ wss.on('connection', (ws, req) => {
       case 'FACE': {
         const p = room.game.players[meta?.playerId];
         if (p && Number.isInteger(msg.facing)) p.facing = ((msg.facing % 4) + 4) % 4;
+        // The flashlight beam follows facing, so a lit player's view changes.
+        if (p?.flashlight?.on) pushState(room, ws);
+        break;
+      }
+
+      /**
+       * Flashlight toggle. The server decides (night, alive, charged) and
+       * answers with the reason, so the client can tell a rule from a fault.
+       * Spectators hold no seat and are refused inside setFlashlight.
+       */
+      case 'FLASHLIGHT': {
+        const p = room.game.players[meta?.playerId];
+        if (p && Number.isInteger(msg.facing)) p.facing = ((msg.facing % 4) + 4) % 4;
+        const r = setFlashlight(room.game, meta?.playerId, Boolean(msg.on));
+        send(ws, { type: 'FLASHLIGHT', ...r, on: Boolean(msg.on) });
+        pushState(room, ws);
         break;
       }
         break;
@@ -418,7 +361,7 @@ wss.on('connection', (ws, req) => {
 http.listen(CONFIG.PORT, () => {
   const a = providerStatus();
   console.log(`\nKhiana server :${CONFIG.PORT}`);
-  console.log(`  chain   ${CONFIG.MOCK_CHAIN ? 'MOCK' : `LIVE on chain ${CONFIG.CHAIN.CHAIN_ID} (main table only)`}`);
+  console.log(`  chain   ${CONFIG.MOCK_CHAIN ? 'MOCK' : 'LIVE'}`);
   console.log(`  agents  ${a.mock ? 'FALLBACK BRAIN' : `${a.provider} / ${a.model}`}`);
   console.log(`  rooms   GET /rooms · POST /rooms · main table "${DEFAULT_CODE}"`);
   console.log(`  POST /game/start to begin\n`);

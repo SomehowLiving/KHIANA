@@ -175,7 +175,6 @@ cmd_verify() {
   ensure_env; ensure_deps
   head_ "settlement"; (cd "$SERVER" && npm run phase1)
   head_ "x402";       (cd "$SERVER" && npm run x402)
-  head_ "full game";  (cd "$SERVER" && npm run game:onchain)
 }
 
 cmd_stop() { free_ports; say "stopped anything listening on ${PORTS[*]}"; }

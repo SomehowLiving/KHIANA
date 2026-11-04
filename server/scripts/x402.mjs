@@ -8,7 +8,6 @@ import { creditBalance, totalSupply, creditAddress, authorizationUsed, signAutho
 import { openChannel, purchasePowerup, offerBribe } from '../src/economy/x402-client.js';
 import { releaseEscrow, checkFacilitator } from '../src/economy/x402.js';
 import { ESCROW_ABI } from '../src/economy/abi.js';
-import { stakeAgents } from '../src/economy/stakes.js';
 
 /**
  * x402 acceptance — every agent payment over the real protocol, on Monad.
@@ -99,12 +98,6 @@ try {
   check('monad facilitator supports our network', fac.ok === true,
     fac.ok ? `schemes: ${fac.schemes.join(', ')}` : String(fac.error).slice(0, 70));
 
-  // A finished game leaves its losers holding nothing, and the checks below
-  // spend from p1, p3 and p4. Start every run from a known stake.
-  const stake = await stakeAgents();
-  check(`agents staked to ${CONFIG.ECONOMY.STARTING_MON} KHIA`, stake.ok,
-    stake.ok ? `treasury ${stake.treasury} KHIA left` : stake.error);
-
   const supply0 = await totalSupply();
   check('credit supply is live', supply0 > 0, `${supply0} KHIA`);
 
@@ -179,10 +172,7 @@ try {
     check('engine released on attestation', rel.ok === true, rel.ok ? rel.txHash?.slice(0, 18) + '…' : rel.error);
     if (rel.ok) {
       const moved = (await creditBalance(w.byId.p5.address)) - p5Before;
-      // The escrow keeps the platform's bribe fee; the rest is the payee's.
-      check('payee received the bribe (less the fee) only after release',
-        rel.paid != null && Math.abs(moved - rel.paid) < 1e-9 && rel.paid <= bribe,
-        `+${moved} KHIA of ${bribe}, fee ${(bribe - moved).toFixed(4)}`);
+      check('payee received the bribe only after release', Math.abs(moved - bribe) < 1e-9, `+${moved} KHIA`);
       console.log(`\n    ${explorer.tx(rel.txHash)}\n`);
     }
   }

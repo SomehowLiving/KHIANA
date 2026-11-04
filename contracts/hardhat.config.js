@@ -21,11 +21,7 @@ module.exports = {
       // The engine account is index 0 of the same mnemonic the server derives
       // its agents from, so the deployer IS the escrow attestor. Deploying
       // from a different key silently bricks release() — it's onlyEngine.
-      // AGENT_MNEMONIC may also be a single private key, which the server
-      // uses as the engine — so deploy from that same key.
-      accounts: /^(0x)?[0-9a-fA-F]{64}$/.test(process.env.AGENT_MNEMONIC?.trim() ?? '')
-        ? [process.env.AGENT_MNEMONIC.trim().replace(/^(?!0x)/, '0x')]
-        : process.env.AGENT_MNEMONIC
+      accounts: process.env.AGENT_MNEMONIC
         ? { mnemonic: process.env.AGENT_MNEMONIC, initialIndex: 0, count: 9 }
         : (process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : []),
     },

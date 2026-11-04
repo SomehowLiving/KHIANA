@@ -10,11 +10,11 @@ import { CONFIG } from '../config.js';
  * anyone in that room will believe.
  */
 
-export function createLedger(players = CONFIG.GAME.PLAYERS) {
+export function createLedger() {
   return {
     entries: [],
     burned: 0,
-    startingSupply: players * CONFIG.ECONOMY.STARTING_MON,
+    startingSupply: CONFIG.GAME.PLAYERS * CONFIG.ECONOMY.STARTING_MON,
   };
 }
 
@@ -32,13 +32,6 @@ export function record(ledger, entry) {
     // WHISPER: hidden from the per-player reveal, never from the audience.
     // The spectator ledger shows every entry regardless of this flag.
     whispered: entry.whispered ?? false,
-    // BRIBE only. A bribe sits in KhianaEscrow until the engine attests it was
-    // honoured (RELEASED) or it lapses and goes back to the payer (REFUNDED).
-    // While LOCKED the money belongs to neither agent's balance.
-    escrowId: entry.escrowId ?? null,
-    escrow: entry.escrow ?? null,
-    releaseTx: null,
-    refundTx: null,
     ts: Date.now(),
   };
   ledger.entries.push(e);
@@ -59,12 +52,8 @@ export function markFollowed(ledger, seq, followed) {
 export function balanceOf(ledger, agentId, starting = CONFIG.ECONOMY.STARTING_MON) {
   let b = starting;
   for (const e of ledger.entries) {
-    // Escrowed bribes: the payer is out of pocket from the lock, the payee
-    // only gains on release, and a refund undoes the lock.
-    const paid = e.escrow !== 'REFUNDED';
-    const received = e.escrow == null || e.escrow === 'RELEASED';
-    if (e.from === agentId && paid) b -= e.amount;
-    if (e.to === agentId && received) b += e.amount;
+    if (e.from === agentId) b -= e.amount;
+    if (e.to === agentId) b += e.amount;
   }
   return Number(b.toFixed(4));
 }

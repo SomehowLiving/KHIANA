@@ -45,13 +45,6 @@ export async function payFor(resource, payer, body) {
   if (first.status !== 402) {
     // Either it was free (mock mode) or it failed outright.
     const data = await first.json().catch(() => null);
-    // We only get here on a live settlement. A resource server answering
-    // "mocked" is a different process in MOCK_CHAIN — a stale dev server on
-    // the same port, or X402_RESOURCE_BASE pointing at the wrong host — and
-    // treating its reply as payment books money that never moved on chain.
-    if (first.ok && data?.mocked) {
-      return { ok: false, error: `resource server at ${resourceBase()} is running MOCK_CHAIN` };
-    }
     return first.ok
       ? { ok: true, ...data }
       : { ok: false, error: data?.error ?? `HTTP ${first.status}` };

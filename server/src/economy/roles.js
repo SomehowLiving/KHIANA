@@ -54,7 +54,7 @@ export async function commitRoles(state) {
   state.roleCommit = { gameId, commitment, salt, roles, txHash: null, revealed: false };
   state.roleCommitHash = commitment;
 
-  if (!state.onChain || !CONFIG.CHAIN.COMMIT_ADDRESS) {
+  if (CONFIG.MOCK_CHAIN || !CONFIG.CHAIN.COMMIT_ADDRESS) {
     state.roleCommit.mocked = true;
     return state.roleCommit;
   }
@@ -88,7 +88,7 @@ export async function revealRoles(state) {
   rc.revealed = true;
   rc.verified = commitmentFor(rc.roles, rc.salt) === rc.commitment;
 
-  if (!state.onChain || !CONFIG.CHAIN.COMMIT_ADDRESS) return rc;
+  if (CONFIG.MOCK_CHAIN || !CONFIG.CHAIN.COMMIT_ADDRESS) return rc;
 
   try {
     const engine = walletFor('engine');

@@ -58,7 +58,6 @@ export const CONFIG = {
     CREDIT_ADDRESS: process.env.CREDIT_ADDRESS ?? '',
     ESCROW_ADDRESS: process.env.ESCROW_ADDRESS ?? '',
     SHOP_ADDRESS: process.env.SHOP_ADDRESS ?? '',
-    POT_ADDRESS: process.env.POT_ADDRESS ?? '',
     COMMIT_ADDRESS: process.env.COMMIT_ADDRESS ?? '',
   },
 
@@ -100,16 +99,28 @@ export const CONFIG = {
     TIMEOUT_TASKS_FOR_LOYALIST_WIN: 3,
   },
 
+  /**
+   * Day/night. The clock is server time from game start; see game/clock.js.
+   * Night affects only what each player SEES (playerView). Elimination and
+   * witness rules deliberately keep daytime sight, so night changes how the
+   * game feels without rebalancing who can kill whom.
+   */
+  DAY: {
+    CYCLE_MS: Number(process.env.DAY_CYCLE_MS ?? 240_000),     // one full day; 10-min game ≈ 2.5 days
+    START_HOUR: Number(process.env.DAY_START_HOUR ?? 10),      // dusk 80s after start at the default cycle
+    NIGHT_VISION_RADIUS: Number(process.env.NIGHT_VISION_RADIUS ?? 1),
+    NIGHT_CORRIDOR_SIGHT: Number(process.env.NIGHT_CORRIDOR_SIGHT ?? 1),
+    FLASHLIGHT_REACH: Number(process.env.FLASHLIGHT_REACH ?? 6),
+    BATTERY_MAX: 100,
+    BATTERY_DRAIN_PER_S: Number(process.env.BATTERY_DRAIN_PER_S ?? 100 / 60),     // a full charge lasts a minute
+    BATTERY_RECHARGE_PER_S: Number(process.env.BATTERY_RECHARGE_PER_S ?? 100 / 90),
+    BATTERY_MIN_TO_START: 10,
+  },
+
   ECONOMY: {
     STARTING_MON: 5.0,
     CONTACT_FEE: 0.25,          // paid TO the recipient, not burned
     MIN_BRIBE: 0.10,
-    // Must match the deployed KhianaEscrow: the platform's cut of every
-    // released bribe, in basis points (500 = 5%). Read by the engine so its
-    // books match what the contract pays out.
-    BRIBE_FEE_BPS: Number(process.env.BRIBE_FEE_BPS ?? 500),
-    // Paid tables: entry fees offered in the lobby, in MON. 0 = free.
-    ENTRY_FEES: [0, 0.01, 0.1],
 
     // docs/POWERUPS.md invariant #3: "No agent affords more than 3 powerups
     // per game." Prices alone don't enforce it — WHISPER at 0.50 means a
@@ -211,44 +222,6 @@ export const CONFIG = {
     BRIEF_MAX_SENTENCES: 2,
   },
 };
-
-/**
- * Rules that depend on how many people are at the table. A lobby picks 4 or 8
- * seats; every game carries its own copy as `state.rules`, and the engine,
- * fog, tasks and agents read that rather than CONFIG.GAME.
- *
- * The 8-seat column is CONFIG.GAME untouched, env overrides included. The
- * 4-seat column is not "8 halved": 2 saboteurs against 2 loyalists would win
- * at tick 1 under the ≤2-alive rule, and CONVERGE's four tiles cannot be
- * covered by three loyalists. So: one saboteur, one kill to lose a loyalist
- * majority, two to escape, three converge tiles, and a smaller maze so four
- * people actually meet.
- */
-export const TABLE_SIZES = [4, 8];
-
-export function rulesFor(players = CONFIG.GAME.PLAYERS) {
-  const g = CONFIG.GAME;
-  if (Number(players) === 4) {
-    return {
-      PLAYERS: 4,
-      SABOTEURS: 1,
-      LOYALISTS_ALIVE_TO_LOSE: 1,
-      SURVIVORS_TO_ESCAPE: 2,
-      TIMEOUT_TASKS_FOR_LOYALIST_WIN: g.TIMEOUT_TASKS_FOR_LOYALIST_WIN,
-      CONVERGE_TILES: 3,
-      MAZE_SIZE: Number(process.env.MAZE_SIZE_4 ?? 10),
-    };
-  }
-  return {
-    PLAYERS: g.PLAYERS,
-    SABOTEURS: g.SABOTEURS,
-    LOYALISTS_ALIVE_TO_LOSE: g.LOYALISTS_ALIVE_TO_LOSE,
-    SURVIVORS_TO_ESCAPE: g.SURVIVORS_TO_ESCAPE,
-    TIMEOUT_TASKS_FOR_LOYALIST_WIN: g.TIMEOUT_TASKS_FOR_LOYALIST_WIN,
-    CONVERGE_TILES: 4,
-    MAZE_SIZE: g.MAZE_SIZE,
-  };
-}
 
 export const TEAM = { LOYALIST: 'LOYALIST', SABOTEUR: 'SABOTEUR' };
 export const PHASE = {

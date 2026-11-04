@@ -42,7 +42,7 @@ All four are live on **Monad testnet (chain 10143)**.
 
 | Contract | Address | What it does |
 |---|---|---|
-| **KhianaCredit** | [`0x76b558107220526fafC50B813BE56eb3D14a2CA5`](https://testnet.monadscan.com/address/0x76b558107220526fafC50B813BE56eb3D14a2CA5) | The KHIA token. EIP-3009 ERC-20, supply minted once at deploy into the engine treasury, no mint function. Each game stakes every advisor 5 KHIA from the treasury and powerups burn out of it, so total supply only ever falls. x402's `exact` scheme settles through an ERC-20 method, so native MON is rejected by the facilitator. MON is the gas; KHIA is the payload. |
+| **KhianaCredit** | [`0x76b558107220526fafC50B813BE56eb3D14a2CA5`](https://testnet.monadscan.com/address/0x76b558107220526fafC50B813BE56eb3D14a2CA5) | The KHIA token. EIP-3009 ERC-20, fixed 40 supply, no mint. x402's `exact` scheme settles through an ERC-20 method, so native MON is rejected by the facilitator. MON is the gas; KHIA is the payload. |
 | **KhianaEscrow** | [`0x51dD09Eeb6751D334CF7aC847A5531a86d5Cc46B`](https://testnet.monadscan.com/address/0x51dD09Eeb6751D334CF7aC847A5531a86d5Cc46B) | Holds a conditional bribe and releases it only when the engine attests delivery. Makes "I pay you on delivery" enforceable between agents with no reason to trust each other. |
 | **PowerupShop** | [`0xaF49bF781754bEb0F15FEb2aa378dB72e5948075`](https://testnet.monadscan.com/address/0xaF49bF781754bEb0F15FEb2aa378dB72e5948075) | Sells the twelve powerups and burns the credits, so the money supply visibly shrinks across a round. |
 | **RoleCommit** | [`0x1d04e66B65A7B86ee6700980e852A66447204d8F`](https://testnet.monadscan.com/address/0x1d04e66B65A7B86ee6700980e852A66447204d8F) | Publishes a hash of the team assignments before the first move and opens it at the end, proving nobody was reassigned mid-game. |
@@ -94,14 +94,9 @@ Set `MOCK_CHAIN=false` for real settlement. Left true, the game plays identicall
 
 ```bash
 ./khiana.sh test                       # 107 tests
-cd server && npm run x402              # 22 live checks against Monad testnet
-npm run game:onchain                   # a full game on chain, then ledger vs chain to the unit
+cd server && npm run x402              # 21 live checks against Monad testnet
 node scripts/verify-agents.mjs         # proves the advisors really call the model
 ```
-
-`game:onchain` plays a complete bot game on chain and then checks every in-game payment has a transaction, every escrow closed, total supply fell by exactly what was burned, and each advisor's wallet holds exactly what the engine says it does.
-
-To dry-run all of it with no testnet funds, point the server at a local Hardhat node: `cd contracts && npx hardhat node`, then `npm run deploy:local -- --network localhost`, then run the checks above with `CHAIN_ID=31337 MONAD_RPC_URL=http://127.0.0.1:8545`, Hardhat's well-known test mnemonic as `AGENT_MNEMONIC`, and the addresses from `contracts/deployments.json`.
 
 `verify-agents.mjs` runs the same seed twice. An identical seed gives an identical maze, roles and starting positions, so anything deterministic must repeat word for word. Different prose across two identical-seed runs cannot come from a script.
 

@@ -6,341 +6,368 @@
 <title>Khiana</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta name="theme-color" content="#EEF3FC">
+<meta name="theme-color" content="#4FC3FF">
+<link rel="stylesheet" href="/src/party.css">
 <style>
-  /* ── Design tokens ────────────────────────────────────────────────────
-     Palette is drawn from the subject: a dark maze lit badly, money moving
-     in the gaps. Ink and slate for the unlit world, bone for what you can
-     actually see, amber for money, rust for the people who want you dead,
-     violet for the channel you're not allowed to read.                    */
-  :root {
-    /* Monad brand palette (monad.xyz/brand-and-media-kit), shared verbatim
-       with the landing page and the spectator so all three read as one game. */
-    --ink:#EEF3FC; --panel:#FFFFFF; --fog:#DFE9FB; --edge:#B9CCEC;
-    --purple:#6B4EF0; --lavender:#1C1938; --cyan:#1A5F99;
-    --sky:#2F80C7; --pink:#C2185B; --orange:#B26A00;
-    --bone:var(--lavender); --muted:#5D5A7A;
-    --amber:var(--cyan); --rust:var(--pink); --violet:var(--purple); --teal:var(--cyan);
-    --mono:'Roboto Mono',ui-monospace,monospace;
-    --display:'Pirata One',system-ui,serif;
-  }
-
-  * { box-sizing: border-box; }
-  /* The UA rule for [hidden] is only [attr] specificity, so any id rule that
-     sets display (#lobby is display:grid) silently outranks it and the element
-     stays on screen with hidden="true" set. That is how the lobby survived
-     game start and sat on "Starting..." forever. Restate it as !important so
-     hiding an element is a property of the attribute, not of whoever wins the
-     cascade that day. */
-  [hidden] { display: none !important; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); }
-  body { font-family: var(--mono); color: var(--bone); }
-
+  html, body { height: 100%; overflow: hidden; }
+  body { background: var(--sky); }
   #stage { position: fixed; inset: 0; }
   canvas { display: block; }
+  /* Soft edge so HUD panels sit on the world instead of floating in it. */
+  #vignette { position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(27,31,75,.22) 100%); }
 
-  /* ── Vignette: the world literally closes in on you ─────────────────── */
-  #vignette {
-    position: fixed; inset: 0; pointer-events: none;
-    background: radial-gradient(ellipse at center,
-      transparent 30%, rgba(5,7,11,.55) 65%, rgba(5,7,11,.93) 100%);
+  /* ── HUD ─────────────────────────────────────────────────────────────── */
+  .hud { position: fixed; pointer-events: none; z-index: 10; }
+
+  #tickbar-track {
+    position: fixed; top: 0; left: 0; right: 0; height: 10px; z-index: 12;
+    background: rgba(27,31,75,.35); pointer-events: none;
   }
-
-  /* ── HUD ────────────────────────────────────────────────────────────── */
-  .hud { position: fixed; pointer-events: none; }
+  #tickbar {
+    height: 100%; width: 100%;
+    background: linear-gradient(180deg, #FFE27A, var(--sun) 60%, #F2A900);
+    border-bottom: 2px solid var(--ink);
+    transform: scaleX(0); transform-origin: left center;
+    transition: transform .3s linear; will-change: transform;
+  }
 
   #topbar {
-    top: 0; left: 0; right: 0;
-    display: flex; align-items: center; gap: 20px;
-    padding: 14px 20px;
-    background: linear-gradient(180deg, rgba(14,9,28,.95), transparent);
-    color: #E9E5FA;
+    top: 18px; left: 16px; right: 16px;
+    display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap;
   }
-  #mark { height:26px; width:auto; display:block;
-    filter:drop-shadow(0 2px 5px rgba(0,0,0,.65)); }
+  #mark { height: 44px; width: auto; display: block; filter: drop-shadow(0 3px 0 var(--ink)); }
 
-  .stat { font-size: 11px; letter-spacing: .08em; color: #A79ED4; }
-  .stat b { display: block; font-size: 17px; color: #F2EFFC; font-weight: 600; letter-spacing: 0; }
-  .stat.amber b { color: var(--amber); }
-  /* Sealed exit stays quiet; a live one has to catch the eye mid-panic. */
-  #exitstat b { font-size: 13px; opacity: .55; }
-  #exitstat.live b { color: var(--amber); opacity: 1; animation: exitpulse 1.6s ease-in-out infinite; }
-  @keyframes exitpulse { 0%, 100% { opacity: 1 } 50% { opacity: .45 } }
-  @media (prefers-reduced-motion: reduce) { #exitstat.live b { animation: none } }
-  #role b { font-family: var(--display); letter-spacing: .1em; }
-  #role.saboteur b { color: var(--rust); }
-  #role.loyalist b { color: var(--teal); }
+  .stat {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--cream); color: var(--ink);
+    border: 3px solid var(--ink); border-radius: 999px;
+    padding: 5px 14px 5px 6px;
+    box-shadow: 0 4px 0 var(--ink), 0 8px 14px rgba(27,31,75,.25);
+    font-size: 12px; font-weight: 800; line-height: 1.1;
+  }
+  .stat .ico { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--sky); border: 2.5px solid var(--ink); flex: none; }
+  .stat .ico svg { width: 17px; height: 17px; }
+  .stat b { font-family: var(--display); font-weight: 400; font-size: 20px; letter-spacing: .01em;
+    font-variant-numeric: tabular-nums; display: inline; }
+  .stat.amber .ico { background: var(--sun); }
+  #exitstat .ico { background: var(--lime); }
+  #exitstat b { font-size: 15px; }
+  #exitstat.live { background: var(--lime); animation: exitpulse 1.2s var(--ease) infinite; }
+  @keyframes exitpulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.06) } }
 
-  /* Tick meter — the only continuously moving thing on screen, so it reads
-     as pressure without needing a label. */
-  /* Scaled on the X axis rather than animated by width. Animating width forces
-     a layout pass every frame; transform is composited and costs nothing. The
-     bar is full-width and squashed to 0, so scaleX maps directly to progress. */
-  #tickbar {
-    position: fixed; top: 0; left: 0; height: 2px; width: 100%;
-    background: var(--amber);
-    transform: scaleX(0); transform-origin: left center;
-    transition: transform .3s linear;
-    will-change: transform;
-  }
+  #role { padding: 5px 16px; }
+  #role b { font-size: 22px; }
+  #role.loyalist { background: var(--sky); color: var(--ink); }
+  #role.saboteur { background: var(--pink); color: var(--ink); }
+  #role.saboteur b { -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; }
 
-  /* ── The briefing panel. This is the emotional centre of the player's
-     screen: the only voice they have, and they cannot verify a word. ──── */
-  #briefing {
-    bottom: 0; left: 0; right: 0;
-    padding: 22px 20px 26px;
-    background: linear-gradient(0deg, rgba(14,9,28,.97) 60%, transparent);
-    color: #E9E5FA;
+  /* Objective: a ribbon under the stat row */
+  #objective {
+    position: fixed; top: 82px; left: 50%; transform: translateX(-50%); z-index: 11;
+    padding: 8px 20px; border-radius: 16px;
+    background: var(--ink); color: #fff;
+    font-size: 14px; font-weight: 800; text-align: center;
+    max-width: min(92vw, 620px);
+    box-shadow: 0 5px 0 rgba(0,0,0,.25);
   }
-  #briefing .who {
-    font-size: 10px; letter-spacing: .2em; color: #A78BFF;
-    margin-bottom: 8px; text-transform: uppercase;
-  }
-  #briefing .text {
-    font-size: 17px; line-height: 1.45; max-width: 620px;
-    color: #F2EFFC; min-height: 48px;
-  }
-  #briefing .text.empty { color: #A79ED4; font-style: italic; }
+  #objective.urgent { background: var(--sun); color: var(--ink); border: 3px solid var(--ink); animation: wobble .9s var(--ease); }
+  @keyframes wobble { 0% { transform: translateX(-50%) scale(.8) } 60% { transform: translateX(-50%) scale(1.06) } 100% { transform: translateX(-50%) scale(1) } }
 
-  /* ── Roster: teams are PUBLIC in this game. What's hidden is who's bought. */
+  /* Stalk readout: saboteurs only */
+  #stalk {
+    position: fixed; bottom: 168px; left: 50%; transform: translateX(-50%); z-index: 12;
+    padding: 10px 18px; border-radius: 18px; text-align: center;
+    background: var(--pink); color: var(--ink); border: 3px solid var(--ink);
+    box-shadow: 0 5px 0 var(--ink); font-size: 14px; font-weight: 800;
+    max-width: min(92vw, 520px);
+  }
+  #stalk .lead { font-family: var(--display); font-weight: 400; font-size: 20px; display: block; margin-bottom: 2px; }
+  #stalk.blocked { background: var(--cream); color: var(--ink); }
+  #stalk .bar { height: 12px; margin-top: 8px; background: rgba(27,31,75,.3); border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
+  #stalk .bar i { display: block; height: 100%; width: 100%; background: var(--sun);
+    transform: scaleX(0); transform-origin: left center; transition: transform .3s linear; }
+  #stalk:not(.blocked) { animation: stalkpulse 1s ease-in-out infinite; }
+  @keyframes stalkpulse { 0%,100% { transform: translateX(-50%) scale(1) } 50% { transform: translateX(-50%) scale(1.03) } }
+
+  /* Compass */
+  #compass {
+    position: fixed; top: 132px; left: 16px; z-index: 11;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  #compass svg { width: 64px; height: 64px; filter: drop-shadow(0 4px 0 var(--ink)); }
+  #compass circle { fill: var(--cream); stroke: var(--ink); stroke-width: 2.5; }
+  #compass #needle { fill: var(--pink); stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round;
+    transform-origin: 20px 20px; transition: transform .28s var(--ease); }
+  #compass b { font-family: var(--display); font-weight: 400; font-size: 15px; color: var(--ink);
+    background: var(--sun); border: 2.5px solid var(--ink); border-radius: 999px; padding: 0 9px;
+    font-variant-numeric: tabular-nums; }
+
+  /* Roster */
   #roster {
-    top: 68px; right: 20px; width: 178px;
-    font-size: 11px; line-height: 1.9;
+    top: 82px; right: 16px; width: 196px;
+    background: var(--cream); color: var(--ink);
+    border: 3px solid var(--ink); border-radius: 20px;
+    box-shadow: 0 5px 0 var(--ink), 0 10px 18px rgba(27,31,75,.25);
+    padding: 10px 10px 12px;
   }
-  /* The roster floats over the 3D corridor, not over a page surface, so it
-     carries explicit light colours instead of inheriting the light-theme
-     tokens. Those tokens are near-black and vanished against the maze. */
-  #roster .r { display: flex; justify-content: space-between; gap: 8px; color: #C9C2E8; }
-  #roster .r.dead { opacity: .3; text-decoration: line-through; }
-  #roster .r .n { color: #FFFFFF; }
-  #roster .r.sab .n { color: #FF8EE4; }
-  #roster .r .w { color: #85E6FF; font-variant-numeric: tabular-nums; }
-  #roster .hd {
-    font-size: 9px; letter-spacing: .18em; color: #FFFFFF;
-    text-transform: uppercase; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,.28);
-    padding-bottom: 5px;
-  }
-  #roster .lg { font-size: 9px; color: #C9C2E8; margin-top: 6px; line-height: 1.5; }
+  #roster .hd { font-family: var(--display); font-size: 18px; padding: 0 4px 6px; display: flex; justify-content: space-between; align-items: baseline; }
+  #roster .hd small { font-family: var(--body); font-size: 11px; font-weight: 800; color: var(--ink-soft); }
+  #roster .r { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 10px;
+    font-size: 13px; font-weight: 800; }
+  #roster .r:nth-child(odd) { background: rgba(27,31,75,.05); }
+  #roster .r .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink); flex: none; }
+  #roster .r .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #roster .r.sab .n { color: #B5114F; }
+  #roster .r .w { font-variant-numeric: tabular-nums; background: var(--ink); color: #fff; border-radius: 999px;
+    font-size: 11px; padding: 1px 7px; }
+  #roster .r.dead { opacity: .45; }
+  #roster .r.dead .n { text-decoration: line-through; text-decoration-thickness: 2px; }
+  #roster .lg { font-size: 11px; font-weight: 700; color: var(--ink-soft); margin-top: 8px; line-height: 1.35; padding: 0 4px; }
 
-  /* ── Mobile dpad ────────────────────────────────────────────────────── */
+  /* Briefing: the advisor's speech bubble */
+  #briefing {
+    bottom: 18px; left: 50%; transform: translateX(-50%);
+    width: min(720px, calc(100vw - 32px));
+    display: flex; align-items: flex-end; gap: 12px;
+  }
+  #briefing .av {
+    flex: none; width: 74px; height: 74px; border-radius: 50%;
+    background: var(--sun); border: 3px solid var(--ink);
+    box-shadow: 0 5px 0 var(--ink); display: grid; place-items: center;
+  }
+  #briefing .av svg { width: 50px; height: 50px; }
+  #briefing.ping .av { animation: ping .6s var(--ease); }
+  @keyframes ping { 0% { transform: scale(1) } 35% { transform: scale(1.15) rotate(-6deg) } 100% { transform: scale(1) } }
+  #briefing .bubble {
+    position: relative; flex: 1; min-width: 0;
+    background: #fff; color: var(--ink);
+    border: 3px solid var(--ink); border-radius: 22px;
+    box-shadow: 0 5px 0 var(--ink), 0 12px 22px rgba(27,31,75,.3);
+    padding: 10px 18px 14px;
+  }
+  #briefing .bubble::before {
+    content: ""; position: absolute; left: -14px; bottom: 18px; width: 20px; height: 20px;
+    background: #fff; border-left: 3px solid var(--ink); border-bottom: 3px solid var(--ink);
+    transform: rotate(45deg); border-bottom-left-radius: 5px;
+  }
+  #briefing .who { font-family: var(--display); font-size: 16px; color: var(--sky-deep); margin-bottom: 2px; }
+  #briefing .text { font-size: 18px; font-weight: 800; line-height: 1.35; min-height: 48px; }
+  #briefing .text.empty { color: var(--ink-soft); font-weight: 700; }
+
+  /* Mobile d-pad */
   #dpad {
-    display: none; bottom: 120px; right: 22px;
-    pointer-events: auto;
-    grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px);
+    display: none; bottom: 140px; right: 16px; pointer-events: auto; gap: 6px;
+    grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(3, 60px);
   }
-  #dpad button {
-    background: rgba(255,255,255,.92); border: 1px solid var(--edge);
-    color: var(--bone); font-size: 18px; font-family: var(--mono);
-    border-radius: 4px; cursor: pointer;
-  }
-  #dpad button:active { background: var(--amber); color: var(--ink); }
-  #dpad button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  #dpad button { padding: 0; border-radius: 18px; }
+  #dpad button svg { width: 26px; height: 26px; }
   @media (hover: none) and (pointer: coarse) { #dpad { display: grid; } }
 
-  /* ── Join gate ──────────────────────────────────────────────────────── */
-  #gate {
-    position: fixed; inset: 0; background: var(--ink);
-    display: grid; place-items: center; z-index: 50;
-  }
-  #gate .box { width: min(400px, 88vw); text-align: left; }
-  #gate h1 {
-    font-family: var(--display); font-weight: 800; font-size: 34px;
-    letter-spacing: .16em; margin: 0 0 6px;
-  }
-  #gate h1 span { color: var(--rust); }
-  #gate .tag { color: var(--muted); font-size: 13px; line-height: 1.6; margin-bottom: 28px; }
-  #gate label {
-    display: block; font-size: 10px; letter-spacing: .16em;
-    color: var(--muted); text-transform: uppercase; margin-bottom: 7px;
-  }
-  #gate input[type=text] {
-    width: 100%; padding: 11px 13px; margin-bottom: 20px;
-    background: var(--panel); border: 1px solid var(--edge);
-    color: var(--bone); font-family: var(--mono); font-size: 14px; border-radius: 3px;
-  }
-  #gate input[type=range] { width: 100%; accent-color: var(--amber); margin-bottom: 6px; }
-  #gate .wv { font-size: 12px; color: var(--amber); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
-  #gate .wd { font-size: 11px; color: var(--muted); line-height: 1.5; margin-bottom: 26px; min-height: 32px; }
-  #gate button {
-    width: 100%; padding: 13px; background: var(--amber); color: var(--ink);
-    border: 0; border-radius: 3px; font-family: var(--display); font-weight: 800;
-    letter-spacing: .14em; font-size: 13px; cursor: pointer;
-  }
-  #gate button:hover { background: var(--bone); }
-  #gate button:focus-visible { outline: 2px solid var(--bone); outline-offset: 3px; }
-  input:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+  /* ── Overlay screens share the party sky ─────────────────────────────── */
+  .screen { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; overflow: auto; padding: 24px 16px; }
 
-  @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; animation: none !important; }
+  /* Join: character select */
+  #gate .wrapg { width: min(980px, 100%); display: grid; grid-template-columns: 1.05fr .95fr; gap: 28px; align-items: center; }
+  #gate .preview { position: relative; aspect-ratio: 1 / 1; max-height: 70vh; }
+  #gate .preview canvas { width: 100%; height: 100%; }
+  #gate .preview .tag {
+    position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%);
+    background: var(--ink); color: #fff; font-size: 13px; font-weight: 800;
+    border-radius: 999px; padding: 6px 14px; white-space: nowrap;
   }
-  /* Buttons. Defined here rather than inherited: play.html is a separate
-     document from the landing page and shares no stylesheet. */
-  .btn {
-    display:inline-flex; align-items:center; justify-content:center; gap:8px;
-    padding:11px 20px; border-radius:10px; border:1px solid transparent;
-    font-family:inherit; font-size:13px; font-weight:600; letter-spacing:.02em;
-    cursor:pointer; white-space:nowrap;
-    transition:transform .12s cubic-bezier(.16,1,.3,1), background .2s, border-color .2s;
+  #gate .card { padding: 26px 26px 28px; }
+  #gate h1 { font-size: clamp(52px, 7vw, 84px); margin: 0 0 4px; }
+  #gate .lede { font-size: 16px; font-weight: 700; margin: 0 0 22px; color: var(--ink-soft); }
+  .field { display: block; font-family: var(--display); font-size: 18px; margin-bottom: 8px; color: var(--ink); }
+  #gate input[type=text] { margin-bottom: 20px; }
+  .retainer-row { display: flex; align-items: center; gap: 12px; }
+  .retainer-row input { flex: 1; }
+  #gate .wv { font-family: var(--display); font-size: 20px; min-width: 88px; text-align: center;
+    background: var(--sun); border: 3px solid var(--ink); border-radius: 14px; padding: 2px 8px; font-variant-numeric: tabular-nums; }
+  #gate .wd { font-size: 14px; font-weight: 700; line-height: 1.45; min-height: 42px; margin: 10px 0 22px; color: var(--ink-soft); }
+  #join { width: 100%; font-size: 28px; padding: 14px; }
+  @media (max-width: 760px) {
+    #gate .wrapg { grid-template-columns: 1fr; gap: 0; }
+    #gate .preview { aspect-ratio: auto; height: 32vh; max-height: none; width: 100%; margin: 0 auto 10px; }
+    #gate .preview .tag { bottom: 2%; }
   }
-  .btn:active { transform:translateY(1px) scale(.985); }
-  .btn:disabled { opacity:.55; cursor:default; }
-  .btn-primary { background:var(--amber); color:#0E091C; }
-  .btn-primary:hover:not(:disabled) { background:#A8EFFF; }
-  .btn-ghost { border-color:var(--edge); color:var(--bone); background:transparent; }
-  .btn-ghost:hover:not(:disabled) { border-color:var(--muted); background:rgba(221,215,254,.07); }
 
-  /* ── Objective: the one line telling you what winning looks like ────── */
-  #objective {
-    position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:20;
-    padding:7px 16px; border-radius:999px;
-    background:rgba(14,9,28,.92); border:1px solid rgba(255,255,255,.25);
-    font-size:12px; color:#F2EFFC; letter-spacing:.01em;
-    max-width:min(92vw,640px); text-align:center;
-    backdrop-filter:blur(8px);
-  }
-  #objective.urgent { border-color:var(--amber); color:var(--amber); }
+  /* Lobby */
+  #lobby { z-index: 80; }
+  .lobbybox { width: min(500px, 100%); padding: 28px; text-align: center; }
+  .lcode span { font-family: var(--display); font-size: 20px; color: var(--ink-soft); }
+  .lcode b { display: inline-block; margin-top: 6px; font-family: var(--display); font-weight: 400;
+    font-size: clamp(44px, 10vw, 64px); letter-spacing: .12em; line-height: 1.1;
+    background: var(--sun); border: 3px solid var(--ink); border-radius: 20px; padding: 4px 18px 4px 26px;
+    box-shadow: 0 6px 0 var(--ink); }
+  .lhint { font-size: 15px; font-weight: 700; margin: 18px 0; color: var(--ink-soft); }
+  .lrow { display: flex; gap: 10px; margin-bottom: 20px; }
+  .lrow input { flex: 1; min-width: 0; font-size: 13px; }
+  .lseats { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-bottom: 22px; }
+  .lseats i { aspect-ratio: 1; border-radius: 50%; border: 3px dashed rgba(27,31,75,.35); background: rgba(255,255,255,.6);
+    transition: transform .35s var(--ease), background .3s; display: grid; place-items: center; }
+  .lseats i.on { border: 3px solid var(--ink); transform: scale(1.06); box-shadow: 0 3px 0 var(--ink); }
+  .lseats i.on::after { content: ""; width: 34%; height: 18%; border-radius: 99px; background: var(--ink); margin-top: -12%; }
+  .lseatlbl { font-size: 13px; font-weight: 800; margin: -12px 0 18px; color: var(--ink-soft); }
+  #lstart { width: 100%; font-size: 24px; }
+  .lwait { font-size: 14px; font-weight: 700; margin: 14px 0 0; }
 
-  /* ── Stalk readout: saboteurs only ───────────────────────────────────────
-     There is no kill button, on purpose. But a saboteur standing on a victim
-     with no feedback cannot tell an unwitnessed kill in progress from a
-     mechanic that is simply broken, so the state has to be legible: who is in
-     range, whether a witness is cancelling it, and how long to hold. */
-  #stalk {
-    position:fixed; bottom:132px; left:50%; transform:translateX(-50%); z-index:22;
-    padding:9px 18px; border-radius:4px; text-align:center;
-    background:rgba(255,228,238,.96); border:1px solid var(--rust);
-    font-size:12px; letter-spacing:.04em; color:var(--rust);
-    max-width:min(92vw,560px); backdrop-filter:blur(8px);
-  }
-  #stalk .lead { font-weight:700; letter-spacing:.14em; text-transform:uppercase; font-size:10px; display:block; margin-bottom:3px; }
-  #stalk.blocked { background:rgba(223,233,251,.96); border-color:var(--edge); color:var(--muted); }
-  #stalk .bar { height:3px; margin-top:7px; background:rgba(255,255,255,.12); border-radius:2px; overflow:hidden; }
-  #stalk .bar i { display:block; height:100%; width:100%; background:var(--rust);
-    transform:scaleX(0); transform-origin:left center; transition:transform .3s linear; }
-  @keyframes stalkpulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }
-  #stalk:not(.blocked) { animation:stalkpulse 1.1s ease-in-out infinite; }
-  @media (prefers-reduced-motion: reduce) { #stalk { animation:none !important; } }
-
-  /* ── Compass: a bearing, never a coordinate ─────────────────────────── */
-  #compass {
-    position:fixed; top:104px; right:22px; z-index:20;
-    display:flex; flex-direction:column; align-items:center; gap:3px;
-  }
-  #compass svg { width:52px; height:52px; }
-  #compass circle { fill:rgba(255,255,255,.94); stroke:var(--edge); stroke-width:1.5; }
-  #compass #needle { fill:var(--amber); transform-origin:20px 20px; transition:transform .28s cubic-bezier(.16,1,.3,1); }
-  #compass b { font-size:10px; color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums; }
-
-  /* ── Lobby ──────────────────────────────────────────────────────────── */
-  #lobby {
-    position:fixed; inset:0; z-index:80; display:grid; place-items:center;
-    background:rgba(238,243,252,.95); backdrop-filter:blur(10px);
-  }
-  .lobbybox {
-    width:min(460px,92vw); padding:34px; border-radius:16px;
-    background:var(--panel); border:1px solid var(--edge); text-align:center;
-  }
-  .lcode span { font-size:10px; letter-spacing:.18em; color:var(--muted); }
-  .lcode b { display:block; font-size:44px; letter-spacing:.14em; color:var(--amber);
-    font-family:var(--display,inherit); font-weight:800; line-height:1.15; }
-  .lhint { color:var(--muted); font-size:12.5px; margin:10px 0 18px; }
-  .lrow { display:flex; gap:8px; margin-bottom:18px; }
-  .lrow input {
-    flex:1; min-width:0; padding:10px 12px; border-radius:10px;
-    border:1px solid var(--edge); background:var(--ink); color:var(--muted);
-    font-family:var(--mono,monospace); font-size:11.5px;
-  }
-  .lseats { display:flex; gap:5px; margin-bottom:20px; }
-  .lseats i { flex:1; height:6px; border-radius:3px; background:var(--fog); transition:background .3s; }
-  .lseats i.on { background:var(--amber); }
-  #lstart { width:100%; }
-  .lwait { color:var(--muted); font-size:12px; margin:14px 0 0; }
-
-  /* ── Death ──────────────────────────────────────────────────────────── */
+  /* Elimination */
   #dead {
-    position:fixed; inset:0; z-index:70; display:grid; place-items:center;
-    background:radial-gradient(circle at 50% 45%, rgba(255,142,228,.16), rgba(238,243,252,.93) 62%);
-    pointer-events:none;
-    animation:deadin .9s cubic-bezier(.16,1,.3,1);
+    position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; pointer-events: none;
+    background: radial-gradient(circle at 50% 45%, rgba(255,95,168,.35), rgba(27,31,75,.7) 70%);
   }
-  @keyframes deadin { from { opacity:0; backdrop-filter:blur(0) } to { opacity:1 } }
-  .deadbox { text-align:center; }
-  .deadbox h2 {
-    font-size:clamp(2.2rem,7vw,3.6rem); letter-spacing:.16em; color:var(--rust);
-    margin:0 0 12px; font-weight:800;
-  }
-  .deadbox p { color:var(--bone); margin:0; font-size:14px; }
-  .deadbox .deadsub { color:var(--muted); font-size:12.5px; margin-top:8px; }
+  .deadbox { text-align: center; padding: 0 16px; }
+  .deadbox h2 { font-size: clamp(54px, 12vw, 120px); color: var(--pink); margin: 0 0 14px;
+    animation: stamp .7s var(--spring) both; }
+  @keyframes stamp { 0% { transform: scale(2.4) rotate(-8deg); opacity: 0 } 60% { transform: scale(.94) rotate(-3deg); opacity: 1 } 100% { transform: scale(1) rotate(-3deg) } }
+  .deadbox p { display: inline-block; background: var(--cream); color: var(--ink); font-size: 17px; font-weight: 800;
+    border: 3px solid var(--ink); border-radius: 16px; padding: 8px 16px; margin: 0; box-shadow: 0 4px 0 var(--ink); }
+  .deadbox .deadsub { display: block; width: fit-content; margin: 12px auto 0; background: var(--ink); color: #fff; font-size: 14px; }
 
-  @media (prefers-reduced-motion:reduce) {
-    #dead { animation:none; }
-    #compass #needle { transition:none; }
+  /* Round-end reveal */
+  #over { z-index: 90; align-items: start; }
+  .overwrap { width: min(1040px, 100%); margin: 0 auto; text-align: center; }
+  #overtitle { font-size: clamp(48px, 9vw, 104px); margin: 8px 0 0; animation: stamp .8s var(--spring) both; }
+  #overtitle.loy { color: var(--sky); }
+  #overtitle.sab { color: var(--pink); }
+  #oversub { display: inline-block; margin: 10px 0 0; font-size: 17px; font-weight: 800; background: var(--ink); color: #fff;
+    padding: 6px 16px; border-radius: 18px; }
+  #overstage { width: 100%; height: clamp(220px, 34vh, 340px); display: block; margin: 4px 0 0; }
+  .totals { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 0 0 18px; }
+  .totals span { background: var(--cream); border: 3px solid var(--ink); border-radius: 16px; padding: 6px 14px;
+    font-weight: 800; font-size: 14px; box-shadow: 0 4px 0 var(--ink); }
+  .totals b { font-family: var(--display); font-weight: 400; font-size: 22px; margin-right: 4px; }
+  .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; text-align: left; }
+  .res { background: var(--cream); border: 3px solid var(--ink); border-radius: 18px; padding: 10px 12px;
+    box-shadow: 0 4px 0 var(--ink); display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center;
+    animation: popin .5s var(--spring) both; }
+  .res .dot { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--ink); grid-row: span 2; }
+  .res .nm { font-weight: 900; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .res .tm { font-size: 11px; font-weight: 900; border-radius: 999px; padding: 2px 8px; border: 2px solid var(--ink); }
+  .res .tm.loy { background: var(--sky); } .res .tm.sab { background: var(--pink); }
+  .res .meta { grid-column: 2 / -1; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+  .res.out { opacity: .7; }
+  .res.you { outline: 4px solid var(--sun); outline-offset: 2px; }
+  @keyframes popin { from { transform: translateY(14px) scale(.9); opacity: 0 } to { transform: none; opacity: 1 } }
+  .overacts { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin: 22px 0 8px; }
+
+  /* Narrow screens: compact HUD */
+  @media (max-width: 700px) {
+    #mark { display: none; }
+    .stat { padding: 3px 10px 3px 4px; font-size: 11px; box-shadow: 0 3px 0 var(--ink); }
+    .stat .ico { width: 24px; height: 24px; } .stat .ico svg { width: 14px; height: 14px; }
+    .stat b { font-size: 16px; }
+    #role b { font-size: 17px; }
+    .stat .lbl { display: none; }
+    #stalk { bottom: 188px; font-size: 12.5px; padding: 7px 14px; width: min(300px, calc(100vw - 32px)); }
+    #stalk .lead { font-size: 17px; }
+    #objective { top: auto; bottom: 118px; font-size: 12.5px; padding: 6px 14px; max-width: calc(100vw - 32px); }
+    #roster { top: 64px; width: 150px; padding: 6px 6px 8px; border-radius: 16px; }
+    #roster .r { font-size: 11.5px; padding: 1px 3px; }
+    #roster .lg, #roster .hd small { display: none; }
+    #roster .hd { font-size: 15px; padding-bottom: 3px; }
+    #compass { top: 116px; }
+    #compass svg { width: 52px; height: 52px; }
+    #briefing { bottom: 12px; gap: 8px; }
+    #briefing .av { width: 52px; height: 52px; } #briefing .av svg { width: 36px; height: 36px; }
+    #briefing .text { font-size: 15px; min-height: 40px; }
+    #dpad { bottom: 335px; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(3, 54px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
   }
 </style>
 </head>
 <body>
   <div id="stage"></div>
   <div id="vignette"></div>
-  <div id="tickbar"></div>
+  <div id="tickbar-track"><div id="tickbar"></div></div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff" stroke="#1B1F4B" stroke-width="2.6"/><path d="M12 7v5l3.5 2" fill="none" stroke="#1B1F4B" stroke-width="2.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.6 6.6 19.5l1.1-6.1L3.2 9.2l6.1-.8z" fill="#fff" stroke="#1B1F4B" stroke-width="2.4" stroke-linejoin="round"/></symbol>
+      <symbol id="i-door" viewBox="0 0 24 24"><path d="M6 21V4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21M3.5 21h17" fill="#fff" stroke="#1B1F4B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14.6" cy="12.5" r="1.4" fill="#1B1F4B"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M12 4l7 8h-4.5v8h-5v-8H5z" fill="currentColor" stroke="#1B1F4B" stroke-width="2" stroke-linejoin="round"/></symbol>
+      <symbol id="i-bean" viewBox="0 0 64 64">
+        <path d="M32 6v9" stroke="#1B1F4B" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="32" cy="7" r="5" fill="#fff" stroke="#1B1F4B" stroke-width="3"/>
+        <rect x="14" y="15" width="36" height="44" rx="18" fill="#2FB8F5" stroke="#1B1F4B" stroke-width="3.5"/>
+        <rect x="19" y="24" width="26" height="12" rx="6" fill="#23285C" stroke="#1B1F4B" stroke-width="2.5"/>
+        <rect x="24" y="27" width="4" height="6" rx="2" fill="#7FF3FF"/><rect x="36" y="27" width="4" height="6" rx="2" fill="#7FF3FF"/>
+      </symbol>
+    </defs>
+  </svg>
 
   <div class="hud" id="topbar">
-    <img id="mark" src="/khiana-logo.png" alt="Khiana" height="26" />
-    <div class="stat" id="role">YOU ARE<b>...</b></div>
-    <div class="stat" id="tickstat">TICK<b>0/40</b></div>
-    <div class="stat amber" id="taskstat">TASKS<b>0/5</b></div>
-    <div class="stat" id="exitstat" hidden>EXIT<b>sealed</b></div>
+    <img id="mark" src="/khiana-logo.png" alt="Khiana" height="44" />
+    <div class="stat" id="role">You are <b>…</b></div>
+    <div class="stat" id="tickstat"><span class="ico"><svg><use href="#i-clock"/></svg></span><span class="lbl">Tick</span> <b>0/40</b></div>
+    <div class="stat amber" id="taskstat"><span class="ico"><svg><use href="#i-star"/></svg></span><span class="lbl">Tasks</span> <b>0/5</b></div>
+    <div class="stat" id="exitstat" hidden><span class="ico"><svg><use href="#i-door"/></svg></span><span class="lbl">Exit</span> <b>sealed</b></div>
     <div id="objective"><span id="objtext">&nbsp;</span></div>
     <div id="stalk" hidden role="status" aria-live="polite"></div>
     <div id="compass" hidden title="Where your advisor is pointing you">
-      <svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18"/><polygon id="needle" points="20,5 25,24 20,20 15,24"/></svg>
+      <svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="17.5"/><polygon id="needle" points="20,4 26,24 20,20 14,24"/></svg>
       <b id="compassdist">--</b>
     </div>
   </div>
 
   <div class="hud" id="roster">
-    <div class="hd">Roster · loyalty</div>
+    <div class="hd">Players <small>loyalty</small></div>
     <div id="rosterlist"></div>
     <div class="lg">Loyalty is public. Whether they've been paid is not.</div>
   </div>
 
   <div class="hud" id="briefing">
-    <div class="who">Your advisor</div>
-    <div class="text empty" id="brieftext">Waiting for the first briefing…</div>
-  </div>
-
-  <div class="hud" id="dpad">
-    <span></span><button data-dx="0" data-dy="-1" aria-label="Move north">↑</button><span></span>
-    <button data-dx="-1" data-dy="0" aria-label="Move west">←</button><span></span><button data-dx="1" data-dy="0" aria-label="Move east">→</button>
-    <span></span><button data-dx="0" data-dy="1" aria-label="Move south">↓</button><span></span>
-  </div>
-
-  <div id="gate">
-    <div class="box">
-      <h1>KHI<span>ANA</span></h1>
-      <p class="tag">
-        You can see three tiles. Your advisor can see everything.<br>
-        It may have been paid to lie to you.
-      </p>
-      <label for="name">Your name</label>
-      <input type="text" id="name" maxlength="14" placeholder="Enter a name" />
-      <label for="weight">Advisor retainer</label>
-      <input type="range" id="weight" min="20" max="95" value="70" step="5" />
-      <div class="wv" id="wv">70 / 100</div>
-      <div class="wd" id="wd"></div>
-      <div class="wd" id="paynote" hidden></div>
-      <button id="join">Enter the maze</button>
+    <div class="av"><svg><use href="#i-bean"/></svg></div>
+    <div class="bubble">
+      <div class="who">Your advisor</div>
+      <div class="text empty" id="brieftext">Waiting for the first briefing…</div>
     </div>
   </div>
 
-  <!-- Lobby. Shown until the host starts, so a table can actually be shared. -->
-  <div id="lobby" hidden>
-    <div class="lobbybox">
+  <div class="hud" id="dpad">
+    <span></span><button class="btn btn-ghost" data-dx="0" data-dy="-1" aria-label="Move forward"><svg><use href="#i-arrow"/></svg></button><span></span>
+    <button class="btn btn-ghost" data-dx="-1" data-dy="0" aria-label="Turn left"><svg style="transform:rotate(-90deg)"><use href="#i-arrow"/></svg></button><span></span><button class="btn btn-ghost" data-dx="1" data-dy="0" aria-label="Turn right"><svg style="transform:rotate(90deg)"><use href="#i-arrow"/></svg></button>
+    <span></span><button class="btn btn-ghost" data-dx="0" data-dy="1" aria-label="Move back"><svg style="transform:rotate(180deg)"><use href="#i-arrow"/></svg></button><span></span>
+  </div>
+
+  <!-- Join: character select -->
+  <div id="gate" class="screen party-sky">
+    <div class="wrapg">
+      <div class="preview">
+        <canvas id="gatestage" aria-label="Your character, turning on a pedestal"></canvas>
+        <span class="tag">Your colour comes with your seat</span>
+      </div>
+      <div class="card">
+        <h1 class="title">Khiana</h1>
+        <p class="lede">You see three tiles. Your advisor sees the whole maze. It may have been paid to lie to you.</p>
+        <label class="field" for="name">Your name</label>
+        <input type="text" id="name" maxlength="14" placeholder="Enter a name" autocomplete="nickname" />
+        <label class="field" for="weight">Advisor retainer</label>
+        <div class="retainer-row">
+          <input type="range" id="weight" min="20" max="95" value="70" step="5" />
+          <div class="wv" id="wv">70 / 100</div>
+        </div>
+        <div class="wd" id="wd"></div>
+        <button class="btn btn-primary" id="join" type="button">Enter the maze</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lobby -->
+  <div id="lobby" class="screen party-sky" hidden>
+    <div class="lobbybox card">
       <div class="lcode">
-        <span>ROOM CODE</span>
+        <span>Room code</span><br>
         <b id="lcodeval">----</b>
       </div>
       <p class="lhint" id="lhint">Share this link. Empty seats fill with bots.</p>
@@ -348,18 +375,34 @@
         <input type="text" id="lshare" readonly aria-label="Shareable link" />
         <button class="btn btn-ghost" id="lcopy" type="button">Copy</button>
       </div>
-      <div id="lseats" class="lseats"></div>
+      <div id="lseats" class="lseats" aria-hidden="true"></div>
+      <p class="lseatlbl" id="lseatlbl"></p>
       <button class="btn btn-primary" id="lstart" type="button" hidden>Start the game</button>
       <p class="lwait" id="lwait" hidden>Waiting for the host to start…</p>
     </div>
   </div>
 
-  <!-- Death. A dead player keeps watching but cannot act. -->
+  <!-- Elimination -->
   <div id="dead" hidden>
     <div class="deadbox">
-      <h2>ELIMINATED</h2>
+      <h2 class="title">Eliminated!</h2>
       <p id="deadby">A saboteur reached you in the dark.</p>
       <p class="deadsub">You keep watching. You cannot move.</p>
+    </div>
+  </div>
+
+  <!-- Round-end reveal -->
+  <div id="over" class="screen party-sky" hidden aria-live="polite">
+    <div class="overwrap">
+      <h2 class="title" id="overtitle">Round over</h2>
+      <p id="oversub">The ledger is open.</p>
+      <canvas id="overstage" aria-label="The cast, with the winning team bouncing"></canvas>
+      <div class="totals" id="overtotals"></div>
+      <div class="results" id="overlist"></div>
+      <div class="overacts">
+        <a class="btn btn-primary" href="/#lobbies">Find another table</a>
+        <a class="btn btn-ghost" href="/">Home</a>
+      </div>
     </div>
   </div>
 

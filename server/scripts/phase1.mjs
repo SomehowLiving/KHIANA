@@ -1,5 +1,4 @@
 
-import { spawn } from 'child_process';
 import { formatEther, parseEther } from 'viem';
 
 import { CONFIG } from '../src/config.js';
@@ -7,8 +6,6 @@ import {
   loadWallets, publicClient, balanceOf, hasCode, explorer, constants, isMonadTestnet,
 } from '../src/economy/wallets.js';
 import { transfer, lockEscrow, releaseEscrow, buyPowerup, checkFacilitator } from '../src/economy/x402.js';
-import { creditBalance, creditAddress } from '../src/economy/credit.js';
-import { stakeAgents } from '../src/economy/stakes.js';
 import { ESCROW_ABI, SHOP_ABI } from '../src/economy/abi.js';
 
 /**
@@ -53,28 +50,6 @@ if (!w) {
   process.exit(1);
 }
 
-/**
- * Every payment below is an x402 round trip to the resource server, so one
- * must be running LIVE. This used to assume a server on PORT, and a dev
- * server there in MOCK_CHAIN answered instead: transfers "confirmed" in
- * milliseconds with no transaction behind them. Boot our own.
- */
-const PORT = Number(process.env.PHASE1_PORT ?? 8789);
-const srv = spawn('node', ['src/index.js'], {
-  cwd: process.cwd(),
-  env: { ...process.env, PORT: String(PORT), MOCK_CHAIN: 'false' },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-let srvOut = '';
-srv.stdout.on('data', d => { srvOut += d; });
-srv.stderr.on('data', d => { srvOut += d; });
-CONFIG.X402.RESOURCE_BASE = `http://localhost:${PORT}`;
-for (let i = 0; i < 60; i++) {
-  try { if ((await fetch(`${CONFIG.X402.RESOURCE_BASE}/health`)).ok) break; } catch { /* not up yet */ }
-  if (srv.exitCode !== null) { console.error(`resource server exited:\n${srvOut}`); process.exit(1); }
-  await new Promise(r => setTimeout(r, 500));
-}
-
 step('Preflight');
 
 let chainId = null;
@@ -98,15 +73,10 @@ const before = {
   p3: await balanceOf(p3.address),
 };
 
-// Agents never broadcast — they sign and the engine submits — so only the
-// engine needs MON. What agents need is KHIA.
-check('engine funded with gas', before.engine > 0.05, `${before.engine.toFixed(3)} MON`);
-const stake = await stakeAgents();
-check(`agents staked to ${CONFIG.ECONOMY.STARTING_MON} KHIA`, stake.ok,
-  stake.ok ? `treasury ${stake.treasury} KHIA left` : stake.error);
+check('engine funded', before.engine > 0.05, `${before.engine.toFixed(3)} MON`);
+check('p1 funded', before.p1 > 0.4, `${before.p1.toFixed(3)} MON`);
 check('p2 derived', !!p2.address, p2.address);
 
-check('KhianaCredit deployed', await hasCode(creditAddress()), creditAddress() || 'CREDIT_ADDRESS unset');
 const escrowLive = await hasCode(CONFIG.CHAIN.ESCROW_ADDRESS);
 const shopLive = await hasCode(CONFIG.CHAIN.SHOP_ADDRESS);
 const commitLive = await hasCode(CONFIG.CHAIN.COMMIT_ADDRESS);
@@ -134,20 +104,19 @@ check(`x402 facilitator supports ${fac.network}`, fac.ok === true,
 
 // ── THE DONE-WHEN ───────────────────────────────────────────────────────────
 
-step(`Transfer ${CONFIG.ECONOMY.CONTACT_FEE} KHIA  p1 → p2   (the Phase 1 acceptance criterion)`);
+step(`Transfer ${CONFIG.ECONOMY.CONTACT_FEE} MON  p1 → p2   (the Phase 1 acceptance criterion)`);
 
 const fee = CONFIG.ECONOMY.CONTACT_FEE;
-const p2CreditBefore = await creditBalance(p2.address);
 const t0 = Date.now();
 const tx = await transfer(p1, 'p2', fee);
 check('transfer confirmed', tx.ok === true, tx.ok ? `${Date.now() - t0}ms` : tx.error);
 
 if (tx.ok) {
-  const afterP2 = await creditBalance(p2.address);
-  const delta = afterP2 - p2CreditBefore;
+  const afterP2 = await balanceOf(p2.address);
+  const delta = afterP2 - before.p2;
   // Exact to the wei on the receiving side — the payee pays no gas.
   check('recipient balance moved by exactly the fee', Math.abs(delta - fee) < 1e-9,
-    `+${delta.toFixed(6)} KHIA`);
+    `+${delta.toFixed(6)} MON`);
   console.log(`\n    ${explorer.tx(tx.txHash)}\n`);
 }
 
@@ -156,21 +125,22 @@ if (tx.ok) {
 step('Escrow round trip  p1 locks → engine attests → p2 paid');
 
 const bribe = 0.5;
-const p2BeforeEscrow = await creditBalance(p2.address);
+const p2BeforeEscrow = await balanceOf(p2.address);
 const lock = await lockEscrow(p1, 'p2', bribe, 'walk your human to (12,7) and hold');
 check('bribe locked in escrow', lock.ok === true, lock.ok ? `escrowId ${lock.escrowId}` : lock.error);
 
 if (lock.ok && lock.escrowId != null) {
-  const held = await creditBalance(CONFIG.CHAIN.ESCROW_ADDRESS);
-  check('contract is holding the funds', held >= bribe, `${held} KHIA in escrow`);
+  const held = await publicClient().getBalance({ address: CONFIG.CHAIN.ESCROW_ADDRESS });
+  check('contract is holding the funds', held >= parseEther(String(bribe)),
+    `${formatEther(held)} MON in escrow`);
 
   const rel = await releaseEscrow(lock.escrowId);
   check('engine released on attestation', rel.ok === true, rel.ok ? rel.txHash : rel.error);
 
   if (rel.ok) {
-    const p2After = await creditBalance(p2.address);
-    check('payee received the bribe, less the fee', rel.paid != null && Math.abs((p2After - p2BeforeEscrow) - rel.paid) < 1e-9,
-      `+${(p2After - p2BeforeEscrow).toFixed(6)} KHIA of ${bribe}`);
+    const p2After = await balanceOf(p2.address);
+    check('payee received the bribe', Math.abs((p2After - p2BeforeEscrow) - bribe) < 1e-9,
+      `+${(p2After - p2BeforeEscrow).toFixed(6)} MON`);
 
     const state = await publicClient().readContract({
       address: CONFIG.CHAIN.ESCROW_ADDRESS, abi: ESCROW_ABI,
@@ -183,7 +153,7 @@ if (lock.ok && lock.escrowId != null) {
 
 // ── Powerup burn ────────────────────────────────────────────────────────────
 
-step('Powerup purchase  p3 buys REVEAL (KHIA leaves the economy)');
+step('Powerup purchase  p3 buys REVEAL (MON leaves the economy)');
 
 if (shopLive) {
   const burnedBefore = await publicClient().readContract({
@@ -198,8 +168,8 @@ if (shopLive) {
       address: CONFIG.CHAIN.SHOP_ADDRESS, abi: SHOP_ABI, functionName: 'totalBurned',
     });
     const burned = Number(formatEther(burnedAfter - burnedBefore));
-    check('KHIA burned from the pool', Math.abs(burned - CONFIG.POWERUPS.REVEAL.cost) < 1e-9,
-      `${burned} KHIA burned, total ${formatEther(burnedAfter)}`);
+    check('MON burned from the pool', Math.abs(burned - CONFIG.POWERUPS.REVEAL.cost) < 1e-9,
+      `${burned} MON burned, total ${formatEther(burnedAfter)}`);
     console.log(`\n    ${explorer.tx(buy.txHash)}\n`);
   }
 } else {
@@ -225,6 +195,5 @@ function summarise() {
     for (const f of failed) console.log(`  ✗ ${f.name}  ${f.detail}`);
   }
   console.log('');
-  srv.kill('SIGKILL');
   process.exit(failed.length ? 1 : 0);
 }

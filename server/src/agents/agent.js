@@ -1,4 +1,4 @@
-import { CONFIG, TEAM, rulesFor } from '../config.js';
+import { CONFIG, TEAM } from '../config.js';
 import { affordablePowerups } from '../game/powerups.js';
 import { taskBriefFor } from '../game/tasks.js';
 import { findPath, distance } from '../game/maze.js';
@@ -61,11 +61,9 @@ export function evaluateBribe(agent, state, offer) {
     p => p.alive && p.team === TEAM.LOYALIST
   ).length;
   const taskProgress = state.tasksComplete / CONFIG.GAME.TASKS_TO_WIN;
-  // Share of the starting loyalists still alive: 6 at an 8-seat table, 3 at 4.
-  const loyalistsAtStart = Object.values(state.players).filter(p => p.team === TEAM.LOYALIST).length || 1;
   let winProb = agent.team === TEAM.LOYALIST
-    ? 0.5 * taskProgress + 0.5 * (loyalistsAlive / loyalistsAtStart)
-    : 1 - (0.5 * taskProgress + 0.5 * (loyalistsAlive / loyalistsAtStart));
+    ? 0.5 * taskProgress + 0.5 * (loyalistsAlive / 6)
+    : 1 - (0.5 * taskProgress + 0.5 * (loyalistsAlive / 6));
   winProb = Math.max(0.05, Math.min(0.95, winProb));
 
   const straightEV = expectedShare * winProb * loyalty;
@@ -199,7 +197,7 @@ export function buildContext(agent, state) {
     bounties: state.effects.bounties?.filter(b => !b.claimed) ?? [],
     exit: state.exit ?? null,
     exitOpen: state.tasksComplete >= CONFIG.GAME.TASKS_TO_WIN,
-    survivorsToEscape: (state.rules ?? rulesFor()).SURVIVORS_TO_ESCAPE,
+    survivorsToEscape: CONFIG.GAME.SURVIVORS_TO_ESCAPE,
     revealed,
     audit: state.effects.auditResults?.get(agent.id) ?? null,
   };

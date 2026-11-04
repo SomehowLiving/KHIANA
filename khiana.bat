@@ -293,9 +293,6 @@ call npm run phase1
 echo.
 echo   === x402 ===
 call npm run x402
-echo.
-echo   === full game ===
-call npm run game:onchain
 popd
 if "%~1"=="" pause
 exit /b 0

@@ -5,7 +5,9 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { VignetteShader } from 'three/addons/shaders/VignetteShader.js';
 
-import { makeCharacter, animateCharacter, killCharacter, updateDeath } from './character.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+import { makeCharacter, animateCharacter, killCharacter, updateDeath, pulseAntenna, seatColor } from './character.js';
 
 /**
  * First-person scene.
@@ -34,19 +36,63 @@ const TILE = 1;
 const WALL_H = 2.4;
 const EYE_H = 0.62;
 
+/**
+ * Toy-arena palette. The maze is built from candy blocks in colour zones, on a
+ * cream checkerboard, under an open sky. Out-of-sight tiles are washed toward
+ * the fog colour instead of toward black, so the world is bright but sight is
+ * exactly as short as before: fog density and server visibility are unchanged.
+ */
 const COLORS = {
-  ink:      0x05070B,
-  fogWall:  0x11161F,
-  litWall:  0x3A465F,
-  fogFloor: 0x0A0E15,
-  litFloor: 0x1F2739,
-  ceiling:  0x080B11,
-  bone:     0xE8E3D9,
-  amber:    0xE5A93C,
-  rust:     0xC2503A,
-  teal:     0x5FA8A0,
-  violet:   0x7B6CD9,
+  sky:      0x9FDBFF,
+  fog:      0xB4E4FF,
+  floorA:   0xFFF6E2,
+  floorB:   0xFFE3B0,
+  bone:     0xFFFFFF,
+  amber:    0xFFC93C,
+  violet:   0xB070FF,
 };
+// Wall zones: pastel enough that the saturated beans always stand out.
+const WALL_ZONES = [0xFF9CCB, 0xFFB879, 0xFFE07A, 0x9EE57E, 0x7FD6FF, 0xB9A3FF];
+const FOG_C = new (THREE.Color)(COLORS.fog);
+const zoneColor = (x, y) => WALL_ZONES[(Math.floor(x / 5) * 7 + Math.floor(y / 5) * 3) % WALL_ZONES.length];
+/**
+ * Toy-block face, drawn once to a canvas: two stacked blocks with rounded
+ * seams, a bevel highlight on each, and a lighter cap band at the top. It is
+ * greyscale on purpose: the per-instance zone colour tints it, so one texture
+ * serves every wall and the draw call stays single.
+ */
+function blockTexture() {
+  const w = 128, h = 256;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+  const rr = (x, y, ww, hh, r) => { g.beginPath(); g.roundRect(x, y, ww, hh, r); };
+  // Cap band (top ~8%).
+  g.fillStyle = '#fff'; g.fillRect(0, 0, w, 22);
+  g.fillStyle = 'rgba(27,31,75,.30)'; g.fillRect(0, 20, w, 4);
+  // Two blocks below the cap.
+  const top = 24, bh = (h - top) / 2;
+  for (let i = 0; i < 2; i++) {
+    const y = top + i * bh;
+    g.fillStyle = '#E9E9F2'; rr(4, y + 4, w - 8, bh - 8, 14); g.fill();
+    g.fillStyle = '#FFFFFF'; rr(10, y + 10, w - 20, bh * 0.42, 10); g.fill();          // bevel highlight
+    g.strokeStyle = 'rgba(27,31,75,.38)'; g.lineWidth = 5; rr(4, y + 4, w - 8, bh - 8, 14); g.stroke();  // seam
+    // A stud: the small round mark that makes it read as a toy block.
+    g.fillStyle = 'rgba(255,255,255,.95)'; g.beginPath(); g.arc(w / 2, y + bh * 0.64, 11, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(27,31,75,.25)'; g.lineWidth = 3; g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+const tint = (hex, lit) => {
+  const c = new THREE.Color(hex);
+  return lit ? c : c.lerp(FOG_C, 0.55);
+};
+
 
 export class Scene {
   constructor(container) {
@@ -56,12 +102,11 @@ export class Scene {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMapping = THREE.NoToneMapping;   // ACES greys out candy colours
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(COLORS.ink);
+    this.scene.background = new THREE.Color(COLORS.sky);
 
     /**
      * Exponential fog, not linear.
@@ -72,7 +117,7 @@ export class Scene {
      * blanked the entire isometric scene when the camera sat past the far
      * plane. Density has no such failure mode.
      */
-    this.scene.fog = new THREE.FogExp2(COLORS.ink, 0.34);
+    this.scene.fog = new THREE.FogExp2(COLORS.fog, 0.34);
 
     // Human-ish FOV. Wider looks fish-eyed in a 1-metre corridor and makes the
     // maze feel larger, which is the opposite of what we want.
@@ -83,38 +128,19 @@ export class Scene {
     this.yaw = 0;
     this.pitch = 0;
 
-    // Cold ambient fill, kept low on purpose. This is a torch in a dark maze:
-    // ambient exists only to keep unlit geometry off pure black, never to light
-    // the room. At 2.0 it washed the whole corridor to near-white and the torch
-    // stopped meaning anything, which is the opposite of the intent.
-    this.scene.add(new THREE.AmbientLight(0x223047, 0.85));
+    // Daylight: sky/ground hemisphere fill plus a sun for form. No shadow
+    // maps: the walls already occlude, and integrated GPUs must hold frame.
+    this.scene.add(new THREE.HemisphereLight(0xF2FAFF, 0x8C9BD6, 2.1));
+    this.sun = new THREE.DirectionalLight(0xFFF4DC, 1.9);
+    this.sun.position.set(-4, 9, -3);
+    this.scene.add(this.sun, this.sun.target);
 
-    /**
-     * The torch. A forward cone from the player's head, which is the only
-     * meaningful light source down here.
-     *
-     * Shadows are off for this light deliberately: a shadow-casting spotlight
-     * that moves every frame forces a shadow-map re-render each frame, and in
-     * a corridor where the walls already occlude everything it buys almost no
-     * visual information for a large cost on integrated GPUs.
-     */
-    // decay MUST be 2, and intensity has to be sized for the NEAREST surface,
-    // not the far end of the corridor. three.js r155+ uses physical units, so a
-    // wall receives intensity / distance^decay; corridors are TILE=1 wide, so
-    // the wall you are facing sits about 0.5 away and gets a 4x multiplier
-    // before intensity is even applied. Measured at spawn facing a wall, the
-    // share of pixels brighter than 0.70 luminance was 3.1% at intensity 9 and
-    // 0% at 6. Five leaves margin and keeps the maze genuinely dark.
-    this.torch = new THREE.SpotLight(0xFFD9A0, 5, 9, Math.PI / 5, 0.6, 2);
-    this.torch.position.set(0, EYE_H, 0);
+    // Kept for API compatibility with the old torch; now a soft local pop.
+    this.torch = new THREE.SpotLight(0xFFFFFF, 0, 1);
     this.torchTarget = new THREE.Object3D();
-    this.scene.add(this.torch, this.torchTarget);
     this.torch.target = this.torchTarget;
-
-    // A small point light at the head stops the immediate floor from going
-    // pure black at your feet, which reads as falling into a hole.
-    this.headLamp = new THREE.PointLight(0xFFC98A, 0.65, 3.2, 2);
-    this.scene.add(this.headLamp);
+    this.headLamp = new THREE.PointLight(0xFFF1D0, 0.9, 3.2, 2);
+    this.scene.add(this.headLamp, this.torchTarget);
 
     this.setupPost();
 
@@ -226,8 +252,8 @@ export class Scene {
       list.forEach((p, i) => {
         m.makeTranslation(p.x * TILE, yOff, p.y * TILE);
         mesh.setMatrixAt(i, m);
-        mesh.setColorAt(i, c.setHex(kind === 'wall' ? COLORS.fogWall : COLORS.fogFloor));
-        this.tileIndex.set(`${p.x},${p.y}`, { kind, i });
+        mesh.setColorAt(i, this.tileColor(kind, p.x, p.y, false));
+        this.tileIndex.set(`${p.x},${p.y}`, { kind, i, x: p.x, y: p.y });
       });
       mesh.instanceMatrix.needsUpdate = true;
       this.scene.add(mesh);
@@ -235,52 +261,40 @@ export class Scene {
     };
 
     this.walls = mk(
-      new THREE.BoxGeometry(TILE, WALL_H, TILE),
-      new THREE.MeshStandardMaterial({ roughness: .92, metalness: .06 }),
+      new RoundedBoxGeometry(TILE, WALL_H, TILE, 2, 0.07),
+      new THREE.MeshStandardMaterial({ roughness: .55, metalness: 0, map: blockTexture() }),
       wallPos, 'wall', WALL_H / 2
     );
     this.floors = mk(
       new THREE.BoxGeometry(TILE, 0.12, TILE),
-      new THREE.MeshStandardMaterial({ roughness: 1 }),
+      new THREE.MeshStandardMaterial({ roughness: .8 }),
       floorPos, 'floor', -0.06
     );
 
-    /**
-     * A ceiling over the walkable tiles.
-     *
-     * Without it you look up into empty background and the maze reads as an
-     * open-topped model rather than somewhere you are trapped. One extra draw
-     * call, and it is what makes the corridors feel enclosed.
-     */
-    const ceilGeo = new THREE.PlaneGeometry(TILE, TILE);
-    const ceilMat = new THREE.MeshStandardMaterial({ color: COLORS.ceiling, roughness: 1, side: THREE.FrontSide });
-    this.ceiling = new THREE.InstancedMesh(ceilGeo, ceilMat, floorPos.length);
-    const cm = new THREE.Matrix4();
-    const rot = new THREE.Matrix4().makeRotationX(Math.PI / 2);   // face downward
-    floorPos.forEach((p, i) => {
-      cm.copy(rot).setPosition(p.x * TILE, WALL_H * 0.92, p.y * TILE);
-      this.ceiling.setMatrixAt(i, cm);
-    });
-    this.ceiling.instanceMatrix.needsUpdate = true;
-    this.scene.add(this.ceiling);
+    // No ceiling: walls stand above eye height, so the open sky reads as
+    // daylight without letting anyone see over them.
 
     this.mazeSize = tiles.length;
+  }
+
+  tileColor(kind, x, y, lit) {
+    if (kind === 'wall') return tint(zoneColor(x, y), lit);
+    return tint((x + y) % 2 ? COLORS.floorA : COLORS.floorB, lit);
+  }
+
+  /** Every advisor briefs on the tick: light every visible antenna. */
+  pulseAdvisors() {
+    for (const [, a] of this.actors) pulseAntenna(a);
   }
 
   /** Recolour instances from the server's authoritative visibility set. */
   applyFog(visibleKeys) {
     if (!this.walls || !this.floors) return;
     const visible = new Set(visibleKeys);
-    const c = new THREE.Color();
-
-    for (const [key, { kind, i }] of this.tileIndex) {
+    for (const [key, { kind, i, x, y }] of this.tileIndex) {
       const lit = visible.has(key);
       const mesh = kind === 'wall' ? this.walls : this.floors;
-      mesh.setColorAt(i, c.setHex(
-        kind === 'wall'
-          ? (lit ? COLORS.litWall : COLORS.fogWall)
-          : (lit ? COLORS.litFloor : COLORS.fogFloor)
-      ));
+      mesh.setColorAt(i, this.tileColor(kind, x, y, lit));
     }
     if (this.walls.instanceColor) this.walls.instanceColor.needsUpdate = true;
     if (this.floors.instanceColor) this.floors.instanceColor.needsUpdate = true;
@@ -299,7 +313,7 @@ export class Scene {
         // away is behaviour. Only a saboteur ever sees another saboteur marked.
         const known = p.team === 'SABOTEUR';
         a = makeCharacter(
-          p.decoy ? COLORS.violet : known ? COLORS.rust : COLORS.teal,
+          p.decoy ? COLORS.violet : seatColor(p.id, this.actors.size),
           { isSaboteur: known, decoy: Boolean(p.decoy) }
         );
         this.actors.set(p.id, a);

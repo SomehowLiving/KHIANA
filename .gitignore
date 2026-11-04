@@ -31,6 +31,13 @@ logs/
 coverage/
 .nyc_output/
 
+# ── Internal docs & planning ────────────────────────────────────────────────
+# Excluded at the owner's request: PRD, build phases, demo script and the
+# powerup catalogue are working documents, not part of the shipped product.
+# NOTE: this also removes the only written explanation of WHY the design is
+# the way it is (the Monad justifications, the economy invariants). If this
+# repo is ever handed to someone else, un-ignore docs/ first.
+docs/
 
 # ── Agent & editor tooling ──────────────────────────────────────────────────
 # Local assistant configuration and installed skill packs. Machine-specific

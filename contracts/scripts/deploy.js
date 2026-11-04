@@ -69,33 +69,20 @@ async function main() {
   if (credit && (await hre.ethers.provider.getCode(credit)) !== '0x') {
     console.log(`  KhianaCredit     ${credit}   (reused)`);
   } else {
-    /**
-     * The engine wallet is the treasury: every live game stakes its agents
-     * from it (server/src/economy/stakes.js) and powerups burn out of it for
-     * good. A supply of exactly one game's stakes (8 × 5 = 40) runs ONE game —
-     * the burns leave too little to stake the next, and with no mint there is
-     * no recovering it short of redeploying. Size it for the event.
-     */
-    const supply = process.env.KHIA_SUPPLY ?? '1000';
+    const players = Number(process.env.PLAYERS ?? 8);
+    const stake = process.env.STARTING_MON ?? '5';
     const token = await hre.ethers.deployContract(
-      'KhianaCredit', [hre.ethers.parseEther(supply), deployer.address]
+      'KhianaCredit', [hre.ethers.parseEther(String(players * Number(stake))), deployer.address]
     );
     await token.waitForDeployment();
     credit = await token.getAddress();
-    console.log(`  KhianaCredit     ${credit}   (${supply} KHIA treasury)`);
+    console.log(`  KhianaCredit     ${credit}   (${players} × ${stake} KHIA)`);
     await new Promise(r => setTimeout(r, chainId === MONAD_TESTNET ? 2000 : 0));
   }
 
   const deployed = { KhianaCredit: credit };
-  // The platform's take: a cut of every released bribe (KHIA) and a rake on
-  // paid tables' entry fees (MON), both to TREASURY_ADDRESS (default: engine).
-  const treasury = process.env.TREASURY_ADDRESS || deployer.address;
-  const bribeFeeBps = Number(process.env.BRIBE_FEE_BPS ?? 500);
-  const rakeBps = Number(process.env.RAKE_BPS ?? 500);
-  console.log(`  treasury         ${treasury}   (bribe fee ${bribeFeeBps / 100}%, rake ${rakeBps / 100}%)`);
   for (const [label, name, args] of [
-    ['KhianaEscrow', 'KhianaEscrow', [deployer.address, credit, treasury, bribeFeeBps]],
-    ['KhianaPot', 'KhianaPot', [deployer.address, treasury, rakeBps]],
+    ['KhianaEscrow', 'KhianaEscrow', [deployer.address, credit]],
     ['RoleCommit', 'RoleCommit', []],
     ['PowerupShop', 'PowerupShop', [deployer.address, credit]],
   ]) {
@@ -119,7 +106,6 @@ async function main() {
     ESCROW_ADDRESS: await Escrow.getAddress(),
     COMMIT_ADDRESS: await Commit.getAddress(),
     SHOP_ADDRESS: await Shop.getAddress(),
-    POT_ADDRESS: deployed.KhianaPot,
   };
 
   // Written so the phase1 script and the ledger reveal can find the addresses
@@ -128,21 +114,17 @@ async function main() {
   fs.writeFileSync(out, JSON.stringify(addresses, null, 2) + '\n');
   console.log(`\nwrote ${out}`);
 
-  // CREDIT_ADDRESS first: every payment in the game signs against it, and
-  // leaving it out of this block left live mode failing on its first payment.
   console.log('\nPaste into .env:\n');
-  console.log('CREDIT_ADDRESS=' + addresses.CREDIT_ADDRESS);
   console.log('ESCROW_ADDRESS=' + addresses.ESCROW_ADDRESS);
   console.log('COMMIT_ADDRESS=' + addresses.COMMIT_ADDRESS);
   console.log('SHOP_ADDRESS='   + addresses.SHOP_ADDRESS);
-  console.log('POT_ADDRESS='    + addresses.POT_ADDRESS);
 
   if (chainId === MONAD_TESTNET) {
     console.log('\nExplorer:');
-    for (const k of ['CREDIT_ADDRESS', 'ESCROW_ADDRESS', 'COMMIT_ADDRESS', 'SHOP_ADDRESS', 'POT_ADDRESS']) {
+    for (const k of ['ESCROW_ADDRESS', 'COMMIT_ADDRESS', 'SHOP_ADDRESS']) {
       console.log(`  https://testnet.monadscan.com/address/${addresses[k]}`);
     }
-    console.log('\nNext:  cd ../server && npm run x402 && npm run game:onchain\n');
+    console.log('\nNext:  cd ../server && npm run phase1\n');
   } else {
     console.log('');
   }

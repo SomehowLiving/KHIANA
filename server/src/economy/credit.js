@@ -160,13 +160,6 @@ export async function creditBalance(address) {
   return Number(formatEther(raw));
 }
 
-/** Exact balance in wei, for arithmetic that has to land to the last unit. */
-export async function creditBalanceWei(address) {
-  return publicClient().readContract({
-    address: creditAddress(), abi: CREDIT_ABI, functionName: 'balanceOf', args: [address],
-  });
-}
-
 export async function totalSupply() {
   const raw = await publicClient().readContract({
     address: creditAddress(), abi: CREDIT_ABI, functionName: 'totalSupply',

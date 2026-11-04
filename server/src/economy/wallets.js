@@ -4,14 +4,11 @@ import {
   http,
   parseEther,
   formatEther,
-  keccak256,
-  concat,
-  toHex,
 } from 'viem';
-import { mnemonicToAccount, privateKeyToAccount, generateMnemonic, english } from 'viem/accounts';
+import { mnemonicToAccount, generateMnemonic, english } from 'viem/accounts';
 import { monadTestnet } from 'viem/chains';
 
-import { CONFIG, TABLE_SIZES } from '../config.js';
+import { CONFIG } from '../config.js';
 
 /**
  * Agent wallet layer — Phase 1.
@@ -45,8 +42,7 @@ import { CONFIG, TABLE_SIZES } from '../config.js';
 const RESERVE_GAP_MS = 1_500;      // > 3 blocks (~1.2s). Safety margin included.
 const NATIVE_TRANSFER_GAS = 21_000n; // Monad charges on the LIMIT — never estimate this.
 
-// Enough wallets for the largest table, whatever size this game is.
-export const AGENT_COUNT = Math.max(CONFIG.GAME.PLAYERS, ...TABLE_SIZES);
+export const AGENT_COUNT = CONFIG.GAME.PLAYERS;
 
 // ── Chain clients ───────────────────────────────────────────────────────────
 
@@ -63,9 +59,6 @@ export const chain = CONFIG.CHAIN.CHAIN_ID === monadTestnet.id
       name: `local-${CONFIG.CHAIN.CHAIN_ID}`,
       nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
       rpcUrls: { default: { http: [CONFIG.CHAIN.RPC_URL] } },
-      // Without a blockTime viem polls receipts every 4s, which makes a local
-      // dry run far slower than the real chain it is standing in for.
-      blockTime: 400,
     };
 
 export const isMonadTestnet = CONFIG.CHAIN.CHAIN_ID === monadTestnet.id;
@@ -99,18 +92,7 @@ export function loadWallets() {
     return null;
   }
 
-  // A single private key is accepted too: it becomes the engine (so an
-  // already-funded wallet can be used as-is), and each agent key is derived
-  // from it as keccak256(engineKey ‖ index). Deterministic, so the same key
-  // always yields the same eight agents.
-  const pk = /^(0x)?[0-9a-fA-F]{64}$/.test(mnemonic)
-    ? (mnemonic.startsWith('0x') ? mnemonic : `0x${mnemonic}`)
-    : null;
-  const accountAt = i => pk
-    ? privateKeyToAccount(i === 0 ? pk : keccak256(concat([pk, toHex(i, { size: 32 })])))
-    : mnemonicToAccount(mnemonic, { addressIndex: i });
-
-  const engineAccount = accountAt(0);
+  const engineAccount = mnemonicToAccount(mnemonic, { addressIndex: 0 });
   const engine = {
     id: 'engine',
     index: 0,
@@ -119,13 +101,11 @@ export function loadWallets() {
     client: createWalletClient({ account: engineAccount, chain, transport: http(CONFIG.CHAIN.RPC_URL) }),
     lastSentAt: 0,
     queue: Promise.resolve(),
-    submitQueue: Promise.resolve(),
-    nonce: null,
   };
 
   const agents = [];
   for (let i = 1; i <= AGENT_COUNT; i++) {
-    const account = accountAt(i);
+    const account = mnemonicToAccount(mnemonic, { addressIndex: i });
     agents.push({
       id: `p${i}`,            // aligned to engine.js player ids
       index: i,
@@ -134,8 +114,6 @@ export function loadWallets() {
       client: createWalletClient({ account, chain, transport: http(CONFIG.CHAIN.RPC_URL) }),
       lastSentAt: 0,
       queue: Promise.resolve(),
-      submitQueue: Promise.resolve(),
-      nonce: null,
     });
   }
 
@@ -203,83 +181,22 @@ export async function sendNative(fromWallet, toAddress, amountMon) {
 }
 
 /**
- * Pipelined submission: serialise only the nonce assignment and broadcast,
- * never the wait for a receipt.
- *
- * The reserve-balance rule reverts on VALUE spend dipping below 10 MON. A
- * zero-value contract call spends gas only, which consensus budgets against
- * min(10 MON, balance) across every in-flight tx — at ~0.04 MON per call that
- * is hundreds of transactions of headroom. So the engine, which submits every
- * settlement in the game and never sends value, does not need the 1.5s gap.
- * Holding it to that gap serialised a busy tick (contacts, bribes, releases,
- * powerups) to well past the 15-second tick length.
- *
- * Nonces are tracked locally because asking the RPC for the pending count
- * between back-to-back sends can return a stale number and collide.
- *
- * The local count goes stale when another process sends from the same key —
- * a verification script beside the server, or a second server. A send the
- * node rejects for its nonce is therefore resynced from the chain and retried
- * rather than failed.
- */
-const NONCE_CONFLICT = /nonce.*(low|already|used|known)|already known|replacement transaction/i;
-
-function submit(wallet, send) {
-  const run = wallet.submitQueue.then(async () => {
-    for (let attempt = 0; ; attempt++) {
-      if (wallet.nonce == null) {
-        wallet.nonce = await publicClient().getTransactionCount({
-          address: wallet.address, blockTag: 'pending',
-        });
-      }
-      const nonce = wallet.nonce;
-      try {
-        const hash = await send(nonce);
-        wallet.nonce = nonce + 1;
-        return hash;
-      } catch (err) {
-        // Unknown whether the node accepted it. Resync from the chain rather
-        // than guess and leave a nonce gap.
-        wallet.nonce = null;
-        const msg = `${err?.shortMessage ?? ''} ${err?.details ?? ''} ${err?.message ?? ''}`;
-        if (attempt < 2 && NONCE_CONFLICT.test(msg)) continue;
-        throw err;
-      }
-    }
-  });
-  wallet.submitQueue = run.then(() => {}, () => {});
-  return run;
-}
-
-/**
- * Contract write. `gas` must be supplied by the caller — see the note above
- * on gas limits.
- *
- * Zero-value calls take the pipelined path; anything carrying value stays
- * behind the reserve-balance gate.
+ * Contract write behind the same gate.
+ * `gas` must be supplied by the caller — see the note above on gas limits.
  */
 export async function sendContract(fromWallet, { address, abi, functionName, args, value, gas }) {
-  const write = nonce => fromWallet.client.writeContract({
-    address,
-    abi,
-    functionName,
-    args,
-    ...(value !== undefined ? { value } : {}),
-    ...(gas !== undefined ? { gas } : {}),
-    ...(nonce !== undefined ? { nonce } : {}),
-  });
-
-  if (value !== undefined && value > 0n) {
-    return gated(fromWallet, async () => {
-      const hash = await write();
-      const receipt = await publicClient().waitForTransactionReceipt({ hash });
-      return { ok: receipt.status === 'success', txHash: hash, receipt };
+  return gated(fromWallet, async () => {
+    const hash = await fromWallet.client.writeContract({
+      address,
+      abi,
+      functionName,
+      args,
+      ...(value !== undefined ? { value } : {}),
+      ...(gas !== undefined ? { gas } : {}),
     });
-  }
-
-  const hash = await submit(fromWallet, write);
-  const receipt = await publicClient().waitForTransactionReceipt({ hash });
-  return { ok: receipt.status === 'success', txHash: hash, receipt };
+    const receipt = await publicClient().waitForTransactionReceipt({ hash });
+    return { ok: receipt.status === 'success', txHash: hash, receipt };
+  });
 }
 
 // ── Reads ───────────────────────────────────────────────────────────────────

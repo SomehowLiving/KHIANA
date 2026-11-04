@@ -4,7 +4,6 @@ import { CONFIG } from '../config.js';
 import { walletFor, sendContract, publicClient, explorer, chain } from './wallets.js';
 import { CREDIT_ABI, creditAddress, decodePayment, conditionHash } from './credit.js';
 import { ESCROW_ABI, SHOP_ABI } from './abi.js';
-import { ESCROW_TTL_SECONDS } from './x402.js';
 
 /**
  * The x402 resource server.
@@ -219,7 +218,7 @@ export function mountX402(app, getGame) {
       return settleBribe(payment, {
         payee: w.address,
         instruction: req.body?.instruction,
-        ttlSeconds: ESCROW_TTL_SECONDS,
+        ttlSeconds: Math.ceil((CONFIG.GAME.TICK_MS / 1000) * 4),
       });
     },
     req => ({ escrowed: true, to: req.body?.to, instruction: req.body?.instruction })

@@ -27,7 +27,8 @@ function api(path, init = {}) {
 
 const SPECTATOR = import.meta.env.VITE_SPECTATOR_URL ?? 'http://localhost:5174';
 
-import { mountMazeBackground } from './maze-bg.js';
+import { mountLineup } from './lineup.js';
+import { seatColor } from './character.js';
 
 const el = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
@@ -40,14 +41,6 @@ const err = msg => { el('err').textContent = msg ?? ''; };
 async function loadConfig() {
   try {
     const c = await api('/config').then(r => r.json());
-
-    // Entry-fee choice appears only when the server can run paid tables.
-    const fee = el('entryfee');
-    if (fee && c.paidTables) {
-      fee.innerHTML = c.entryFees.map(f =>
-        `<option value="${f}">${f > 0 ? `${f} MON entry` : 'Free'}</option>`).join('');
-      fee.hidden = false;
-    }
 
     const set = (id, v) => { const n = el(id); if (n) n.textContent = v; };
     set('cfg-tasks', c.tasksToWin);
@@ -73,8 +66,9 @@ async function loadConfig() {
 // ── Lobbies ─────────────────────────────────────────────────────────────────
 
 function lobbyCard(r) {
-  const seats = Array.from({ length: r.capacity }, (_, i) =>
-    `<i class="${i < r.humans ? 'on' : ''}"></i>`).join('');
+  const seats = Array.from({ length: r.capacity }, (_, i) => i < r.humans
+    ? `<i class="on" style="background:#${seatColor(null, i).toString(16).padStart(6, '0')}"></i>`
+    : '<i></i>').join('');
 
   const status = r.winner ? 'finished'
     : r.started ? `<span class="live">live · tick ${r.tick}/${r.totalTicks}</span>`
@@ -88,7 +82,7 @@ function lobbyCard(r) {
       </div>
       <div class="seats" title="${r.humans} of ${r.capacity} seats taken">${seats}</div>
       <div class="meta">
-        <span><b>${r.humans}</b>/${r.capacity} humans · ${r.capacity}-seat table${r.entryFee > 0 ? ` · <b>${r.entryFee} MON</b> to enter` : ' · free'}</span>
+        <span><b>${r.humans}</b>/${r.capacity} humans</span>
         <span>${status}</span>
       </div>
       <a class="btn ${r.joinable ? 'btn-primary' : 'btn-ghost'}"
@@ -131,11 +125,7 @@ el('create').addEventListener('click', async () => {
     const res = await api('/rooms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name, isPublic: true,
-        players: Number(el('tablesize')?.value ?? 8),
-        entryFee: Number(el('entryfee')?.value ?? 0),
-      }),
+      body: JSON.stringify({ name, isPublic: true }),
     }).then(r => r.json());
 
     if (!res.ok) throw new Error(res.error ?? 'Could not open a table');
@@ -204,9 +194,12 @@ if (!reduce) {
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
-// The labyrinth behind the page.
-const mazeCanvas = document.querySelector('canvas.maze');
-if (mazeCanvas) mountMazeBackground(mazeCanvas);
+// The cast on the hero podium. Colours are seat colours, never teams.
+const hero = el('herostage');
+if (hero) mountLineup(hero, {
+  cast: ['p1', 'p4', 'p5', 'p3', 'p6'].map(id => ({ id })),
+  camera: { zoom: 1.08, lookY: 0.55, fov: 30 },
+});
 
 loadConfig();
 loadLobbies();

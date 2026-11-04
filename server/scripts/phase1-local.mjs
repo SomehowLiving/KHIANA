@@ -42,7 +42,6 @@ if (d.chainId !== 31337) {
   process.exit(1);
 }
 
-process.env.CREDIT_ADDRESS = d.CREDIT_ADDRESS;
 process.env.ESCROW_ADDRESS = d.ESCROW_ADDRESS;
 process.env.SHOP_ADDRESS = d.SHOP_ADDRESS;
 process.env.COMMIT_ADDRESS = d.COMMIT_ADDRESS;

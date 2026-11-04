@@ -1,9 +1,8 @@
-import { parseEther, formatEther, parseEventLogs, keccak256, toHex } from 'viem';
+import { parseEther, parseEventLogs, keccak256, toHex } from 'viem';
 
 import { CONFIG } from '../config.js';
 import { ESCROW_ABI, SHOP_ABI } from './abi.js';
 import { walletFor, sendNative, sendContract, publicClient, explorer } from './wallets.js';
-import { CREDIT_ABI, creditAddress, signAuthorization } from './credit.js';
 import { openChannel, purchasePowerup, offerBribe } from './x402-client.js';
 
 /**
@@ -14,14 +13,10 @@ import { openChannel, purchasePowerup, offerBribe } from './x402-client.js';
  * engine cannot tell the difference, which is what makes the mock a genuine
  * demo parachute rather than a stub.
  *
- * Every call takes `{ mock }`, defaulting to MOCK_CHAIN. The engine passes the
- * game's own mode, because only the main table settles on chain: every room
- * shares the same eight agent wallets, so two live rooms would spend from one
- * set of balances and neither ledger would match the chain.
- *
- * Agents never broadcast. They sign, and the engine submits every settlement
- * through wallets.sendContract — read the comment there on why the engine's
- * zero-value calls are pipelined rather than spaced 1.5s apart.
+ * All sends route through wallets.js, which serialises each agent to one
+ * transaction per ~1.5s. That is not throttling for politeness — it is what
+ * keeps Monad's reserve-balance rule from reverting every sub-10-MON transfer.
+ * Read the comment at the top of wallets.js before changing anything here.
  *
  * Reference: https://docs.monad.xyz/guides/x402
  * Facilitator: https://x402-facilitator.molandak.org  (GET /supported lists schemes)
@@ -35,11 +30,11 @@ import { openChannel, purchasePowerup, offerBribe } from './x402-client.js';
 let mockNonce = 0;
 
 /**
- * Escrow TTL. Commitments expire two ticks after acceptance (engine.js), so
- * the on-chain lock must outlive that with room to spare — otherwise a bribe
- * the agent DID honour becomes refundable before the engine attests it.
+ * Escrow TTL. Commitments expire two ticks after acceptance (engine.js:251),
+ * so the on-chain lock must outlive that with room to spare — otherwise a
+ * bribe the agent DID honour becomes refundable before the engine attests it.
  */
-export const ESCROW_TTL_SECONDS = Math.ceil((CONFIG.GAME.TICK_MS / 1000) * 4);
+const ESCROW_TTL_SECONDS = Math.ceil((CONFIG.GAME.TICK_MS / 1000) * 4);
 
 /** Contract-call gas. Monad bills the LIMIT, so estimate tight, buffer 10%. */
 async function gasFor(wallet, params) {
@@ -74,8 +69,8 @@ function mockTx() {
  * RECIPIENT rather than burning is what makes the social graph economically
  * visible — an agent holding valuable information earns from being popular.
  */
-export async function transfer(from, toPlayerId, amount, { mock = CONFIG.MOCK_CHAIN } = {}) {
-  if (mock) {
+export async function transfer(from, toPlayerId, amount) {
+  if (CONFIG.MOCK_CHAIN) {
     return { ok: true, mocked: true, txHash: mockTx() };
   }
   try {
@@ -97,8 +92,8 @@ export async function transfer(from, toPlayerId, amount, { mock = CONFIG.MOCK_CH
  * releases it when the game engine confirms the target human entered the
  * target zone. No trust needed, none possible.
  */
-export async function lockEscrow(from, toPlayerId, amount, condition, { mock = CONFIG.MOCK_CHAIN } = {}) {
-  if (mock) {
+export async function lockEscrow(from, toPlayerId, amount, condition) {
+  if (CONFIG.MOCK_CHAIN) {
     return { ok: true, mocked: true, escrowId: `esc_${mockNonce++}`, txHash: mockTx() };
   }
   if (!CONFIG.CHAIN.ESCROW_ADDRESS) {
@@ -135,8 +130,8 @@ async function escrowIdFromTx(txHash) {
  * agent that took it. Only the engine key can call this — see the
  * centralisation caveat documented in KhianaEscrow.sol.
  */
-export async function releaseEscrow(escrowId, { mock = CONFIG.MOCK_CHAIN } = {}) {
-  if (mock) {
+export async function releaseEscrow(escrowId, _engineProof) {
+  if (CONFIG.MOCK_CHAIN) {
     return { ok: true, mocked: true, txHash: mockTx() };
   }
   if (escrowId == null) return { ok: false, txHash: null, error: 'no escrowId' };
@@ -151,22 +146,15 @@ export async function releaseEscrow(escrowId, { mock = CONFIG.MOCK_CHAIN } = {})
 
   try {
     const res = await sendContract(engine, { ...params, gas: await gasFor(engine, params) });
-    // What the payee actually received, after the platform's bribe fee —
-    // read from the contract's own event so the books can't disagree with it.
-    let paid = null;
-    try {
-      const [ev] = parseEventLogs({ abi: ESCROW_ABI, eventName: 'Released', logs: res.receipt.logs });
-      paid = Number(formatEther(ev.args.amount));
-    } catch { /* paid stays null; the caller falls back to the configured fee */ }
-    return { ...res, paid, url: explorer.tx(res.txHash) };
+    return { ...res, url: explorer.tx(res.txHash) };
   } catch (err) {
     return { ok: false, txHash: null, error: String(err?.shortMessage ?? err) };
   }
 }
 
 /** Anyone may refund an expired escrow — a stalled engine can't strand money. */
-export async function refundEscrow(escrowId, { mock = CONFIG.MOCK_CHAIN } = {}) {
-  if (mock) return { ok: true, mocked: true, txHash: mockTx() };
+export async function refundEscrow(escrowId) {
+  if (CONFIG.MOCK_CHAIN) return { ok: true, mocked: true, txHash: mockTx() };
 
   const engine = resolve('engine');
   const params = {
@@ -195,8 +183,8 @@ export async function refundEscrow(escrowId, { mock = CONFIG.MOCK_CHAIN } = {}) 
  * deployed ourselves, so a facilitator outage on demo night costs us the x402
  * talking point but not the game.
  */
-export async function buyPowerup(agent, type, cost, { mock = CONFIG.MOCK_CHAIN } = {}) {
-  if (mock) {
+export async function buyPowerup(agent, type, cost) {
+  if (CONFIG.MOCK_CHAIN) {
     return { ok: true, mocked: true, txHash: mockTx(), cost };
   }
   if (!CONFIG.CHAIN.SHOP_ADDRESS) {
@@ -208,36 +196,6 @@ export async function buyPowerup(agent, type, cost, { mock = CONFIG.MOCK_CHAIN }
     return res.ok ? { ...res, cost } : { ok: false, txHash: null, cost, error: res.error };
   } catch (err) {
     return { ok: false, txHash: null, cost, error: String(err?.shortMessage ?? err) };
-  }
-}
-
-/**
- * A payment between two game wallets that is not a paid resource: bounty
- * claims, the end-of-game payout, and handing excess stake back to the engine.
- *
- * Same custody model as x402 — the payer signs an EIP-3009 authorization and
- * the engine submits it — so no agent ever needs gas. Pass `amount` as a
- * decimal string (formatEther output) when it must be exact to the wei.
- */
-export async function payBetween(fromId, toId, amount, { mock = CONFIG.MOCK_CHAIN } = {}) {
-  if (mock) return { ok: true, mocked: true, txHash: mockTx() };
-  try {
-    const from = resolve(fromId);
-    const to = resolve(toId);
-    const engine = resolve('engine');
-    const { authorization: a, signature } = await signAuthorization(from, to.address, amount, 'transfer');
-    const res = await sendContract(engine, {
-      address: creditAddress(),
-      abi: CREDIT_ABI,
-      functionName: 'transferWithAuthorization',
-      args: [a.from, a.to, a.value, a.validAfter, a.validBefore, a.nonce, signature],
-      gas: 200_000n,
-    });
-    return res.ok
-      ? { ...res, url: explorer.tx(res.txHash) }
-      : { ok: false, txHash: res.txHash, error: 'transferWithAuthorization reverted' };
-  } catch (err) {
-    return { ok: false, txHash: null, error: String(err?.shortMessage ?? err) };
   }
 }
 

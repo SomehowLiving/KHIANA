@@ -9,29 +9,36 @@ import { CONFIG } from '../config.js';
  * table and these move with it.
  */
 
-/**
- * Engine gas. The engine submits EVERY transaction in the game — stakes,
- * contact fees, escrow locks and releases, powerup burns, the payout, the role
- * commit and reveal — roughly 50–70 per game, at a 100k–400k gas limit each,
- * and Monad bills the limit. Plus the four contract deploys. 5 MON covers the
- * deploy and a few games; raise ENGINE_GAS_RESERVE for a long demo day.
- */
-export const ENGINE_RESERVE = Number(process.env.ENGINE_GAS_RESERVE ?? 5.0);
+/** Gas headroom for one agent across a full 40-tick game. */
+export const GAS_ALLOWANCE = Number(process.env.AGENT_GAS_ALLOWANCE ?? 0.5);
+
+/** Engine gas: contract deploys plus a release() per accepted bribe. */
+export const ENGINE_RESERVE = Number(process.env.ENGINE_GAS_RESERVE ?? 1.0);
 
 /**
- * Agents hold no MON at all. Since stakes moved to KHIA they only sign
- * EIP-3009 authorizations, which the engine submits and pays for, and their
- * KHIA comes from the engine's treasury at the start of each game
- * (economy/stakes.js). These used to ask for 5.5 MON per agent — a native
- * stake from before KHIA existed, plus gas they never spend.
+ * PROVE — the minimum for `npm run phase1` to pass.
+ *
+ * Derived from what the acceptance script actually spends, not guessed:
+ *   p1  sends CONTACT_FEE, then locks a 0.5 escrow  → both + gas
+ *   p3  buys the most expensive powerup it tests    → cost + gas
+ *   p2  only ever receives                          → nothing
  */
 export function proveTargets() {
-  return { engine: ENGINE_RESERVE };
+  const escrowProbe = 0.5;
+  return {
+    engine: ENGINE_RESERVE,
+    p1: CONFIG.ECONOMY.CONTACT_FEE + escrowProbe + GAS_ALLOWANCE,
+    p3: CONFIG.POWERUPS.REVEAL.cost + GAS_ALLOWANCE,
+  };
 }
 
-/** PLAY — identical: a live game needs only engine gas. */
+/** PLAY — a full live game: every agent carries a real stake. */
 export function playTargets() {
-  return { engine: ENGINE_RESERVE };
+  const t = { engine: ENGINE_RESERVE };
+  for (let i = 1; i <= CONFIG.GAME.PLAYERS; i++) {
+    t[`p${i}`] = CONFIG.ECONOMY.STARTING_MON + GAS_ALLOWANCE;
+  }
+  return t;
 }
 
 export function targetsFor(mode) {

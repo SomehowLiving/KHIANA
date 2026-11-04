@@ -38,10 +38,22 @@ const C = {
   // teal and rust stay far apart from each other too: on this screen alone,
   // team colour is public, and telling Loyalist from Saboteur at a glance is
   // the entire reason the audience is watching.
-  ink: '#EEF3FC', fog: '#6B4EF0', edge: '#B9CCEC', floor: '#FFFFFF',
-  bone: '#1C1938', muted: '#5D5A7A', amber: '#1A5F99',
-  rust: '#C2185B', violet: '#6B4EF0', teal: '#1A5F99',
+  // Neon Party Noir: steel-blue walls on a near-black floor. Fill = the player's
+  // seat colour (who); ring = team (solid bone Loyalist, dashed red Saboteur).
+  ink: '#070B18', fog: '#2F5D8A', edge: '#26304A', floor: '#0C1122',
+  bone: '#E6ECF7', muted: '#8590A8', amber: '#A3FF3C',
+  rust: '#FF2E63', violet: '#FFC23D', teal: '#E6ECF7',
 };
+
+// Per-seat character colours (p1..p8). Identity only, never team.
+// Keep in sync with client/src/scene.js.
+const PLAYER_COLORS = ['#2FB8F5', '#FF8A3D', '#6ED34A', '#FF5FA8', '#FFC93C', '#5B6CFF', '#22D6A0', '#B070FF'];
+function seatColor(id, fallbackIndex = 0) {
+  const m = /(\d+)/.exec(String(id ?? ''));
+  const i = m ? Number(m[1]) - 1 : fallbackIndex;
+  return PLAYER_COLORS[((i % 8) + 8) % 8];
+}
+
 
 let state = null;
 let seen = 0;
@@ -116,13 +128,13 @@ function drawBoard() {
   // tasks are done, every remaining decision is about this tile.
   if (state.exit) {
     const ex = ox + state.exit.x * s, ey = oy + state.exit.y * s;
-    ctx.strokeStyle = state.exitOpen ? C.amber : 'rgba(93,90,122,.45)';
+    ctx.strokeStyle = state.exitOpen ? C.amber : 'rgba(133,144,168,.45)';
     ctx.lineWidth = Math.max(1.5, s * 0.2);
     ctx.strokeRect(ex, ey, s, s);
     if (state.exitOpen) {
       // Pulse only when it's live, so "open" reads as an event.
       const pulse = 0.5 + Math.sin(performance.now() * 0.004) * 0.5;
-      ctx.fillStyle = `rgba(26,95,153,${0.14 + pulse * 0.30})`;
+      ctx.fillStyle = `rgba(163,255,60,${0.14 + pulse * 0.30})`;
       ctx.fillRect(ex, ey, s, s);
     }
   }
@@ -140,25 +152,27 @@ function drawBoard() {
     const x = a.x + (b.x - a.x) * t;
     const y = a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * s * 2.5;
 
-    ctx.strokeStyle = `rgba(26,95,153,${0.40 * (1 - t)})`;
+    ctx.strokeStyle = `rgba(255,194,61,${0.45 * (1 - t)})`;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
 
-    ctx.fillStyle = C.amber;
+    ctx.fillStyle = C.violet;
     ctx.fillRect(x - s * .3, y - s * .2, s * .6, s * .4);
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = C.ink;
     ctx.font = `600 ${Math.max(7, s * .3)}px 'Roboto Mono', monospace`;
     ctx.textAlign = 'center';
     ctx.fillText(String(e.amount), x, y + s * .12);
   }
 
   // Players
-  for (const p of (state.players ?? [])) {
+  for (const [pi, p] of (state.players ?? []).entries()) {
     const c = at(p);
+    const sab = p.team === 'SABOTEUR';
+    const fill = seatColor(p.id, pi);
     const r = s * 0.4;
 
     if (!p.alive) {
-      ctx.strokeStyle = 'rgba(93,90,122,.65)';
+      ctx.strokeStyle = 'rgba(133,144,168,.65)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(c.x - r, c.y - r); ctx.lineTo(c.x + r, c.y + r);
@@ -170,16 +184,22 @@ function drawBoard() {
     // A violet halo marks an agent that has taken money. The audience
     // reads corruption at a glance; the player never will.
     if (p.bribed) {
-      ctx.fillStyle = 'rgba(107,78,240,.34)';
+      ctx.fillStyle = 'rgba(255,194,61,.30)';
       ctx.beginPath(); ctx.arc(c.x, c.y, r * 2.1, 0, Math.PI * 2); ctx.fill();
     }
 
     // Dark outline first, so a dot sitting on a lit corridor still reads as a
     // separate object rather than melting into the floor.
-    ctx.fillStyle = p.team === 'SABOTEUR' ? C.rust : C.teal;
-    ctx.strokeStyle = '#FFFFFF';
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = C.ink;
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Team ring: solid bone = Loyalist, dashed red = Saboteur.
+    ctx.strokeStyle = sab ? C.rust : C.teal;
+    ctx.lineWidth = Math.max(1.5, s * 0.12);
+    ctx.setLineDash(sab ? [Math.max(2, s * 0.22), Math.max(1.5, s * 0.14)] : []);
+    ctx.beginPath(); ctx.arc(c.x, c.y, r * 1.45, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
 
     // Name beside the dot. Eight identical circles tell the audience where
     // bodies are but not whose, which is useless when the whole story is
@@ -190,10 +210,10 @@ function drawBoard() {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 3.5;
-    ctx.strokeStyle = 'rgba(255,255,255,.92)';
-    ctx.strokeText(label, c.x + r + 3, c.y);
-    ctx.fillStyle = p.team === 'SABOTEUR' ? C.rust : C.teal;
-    ctx.fillText(label, c.x + r + 3, c.y);
+    ctx.strokeStyle = 'rgba(7,11,24,.92)';
+    ctx.strokeText(label, c.x + r * 1.45 + 4, c.y);
+    ctx.fillStyle = sab ? C.rust : fill;
+    ctx.fillText(label, c.x + r * 1.45 + 4, c.y);
   }
 }
 

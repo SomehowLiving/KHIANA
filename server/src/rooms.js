@@ -1,12 +1,11 @@
 import { randomUUID } from 'crypto';
 
-import { CONFIG, TABLE_SIZES } from './config.js';
+import { CONFIG } from './config.js';
 import { createGame, runTick, resolveTick, movePlayer, endGame } from './game/engine.js';
 import { playerView, spectatorView } from './game/fog.js';
+import { gameClock, flashlightState } from './game/flashlight.js';
 import { stepAllBots, claimSeat, releaseSeat, firstOpenSeat } from './agents/bots.js';
 import { commitRoles } from './economy/roles.js';
-import { stakeAgents } from './economy/stakes.js';
-import { potAvailable, potIdFor, openPot, settlePot, cancelPot } from './economy/pot.js';
 import { startRecording, captureFrame, captureReveal, stopRecording, isRecording } from './recording.js';
 
 /**
@@ -43,22 +42,7 @@ function newCode() {
   throw new Error('could not allocate a unique room code');
 }
 
-/**
- * A fresh game for this room, carrying the room's settlement mode.
- *
- * Every room shares the same eight agent wallets, so at most one room may
- * settle on chain — the server gives that to the main table. Every other
- * lobby plays the identical game with mocked settlement.
- */
-function newGame(room, seed) {
-  const game = createGame({ seed: seed ?? Date.now(), playerCount: room.players });
-  game.onChain = Boolean(room.onChain);
-  return game;
-}
-
-export function createRoom({ name, isPublic = true, seed, hostName, code: fixedCode, onChain = false, players, entryFee = 0 } = {}) {
-  // Table size is chosen per lobby: 4 or 8 seats. Anything else gets the default.
-  const seats = TABLE_SIZES.includes(Number(players)) ? Number(players) : CONFIG.GAME.PLAYERS;
+export function createRoom({ name, isPublic = true, seed, hostName, code: fixedCode } = {}) {
   if (rooms.size >= MAX_ROOMS) throw new Error('server is at room capacity');
 
   /**
@@ -74,15 +58,8 @@ export function createRoom({ name, isPublic = true, seed, hostName, code: fixedC
     code,
     name: (name || `${hostName ? hostName + "'s" : 'Open'} lobby`).slice(0, 40),
     isPublic: Boolean(isPublic),
-    players: seats,
-    onChain: Boolean(onChain),
-    // MON per seat, 0 = free. Only offered when the server is live with a pot.
-    entryFee: potAvailable() && CONFIG.ECONOMY.ENTRY_FEES.includes(Number(entryFee)) ? Number(entryFee) : 0,
-    pot: null,
-    walletSeats: new Map(),   // wallet address -> playerId: one paid seat per wallet
-    game: null,
+    game: createGame({ seed: seed ?? Date.now() }),
     loop: null,
-    starting: false,
     sockets: new Map(),      // ws -> { role, playerId }
     seatTokens: new Map(),   // token -> playerId
     createdAt: Date.now(),
@@ -101,79 +78,8 @@ export function createRoom({ name, isPublic = true, seed, hostName, code: fixedC
     /** Bots only take over once nobody is coming. */
     autoStartAt: null,
   };
-  room.game = newGame(room, seed);
-  room.pot = newPot(room);
   rooms.set(code, room);
   return room;
-}
-
-// ── Paid tables ─────────────────────────────────────────────────────────────
-
-/**
- * Open this game's pot on chain. Entries are refused until it lands, so the
- * lobby shows its status and the client waits for 'open' before paying.
- */
-function newPot(room) {
-  if (!(room.entryFee > 0)) return null;
-  const pot = {
-    fee: room.entryFee,
-    gameId: potIdFor(room.code, room.game.seed),
-    address: CONFIG.CHAIN.POT_ADDRESS,
-    status: 'opening',
-    entrants: [],
-  };
-  openPot(pot.gameId, pot.fee)
-    .then(r => { pot.status = r.ok ? 'open' : 'failed'; pot.openTx = r.txHash; })
-    .catch(err => { pot.status = 'failed'; pot.error = String(err?.shortMessage ?? err); })
-    .finally(() => broadcast(room));
-  return pot;
-}
-
-/** A paid game that will never finish refunds everyone in full. */
-function abandonPot(room) {
-  const pot = room.pot;
-  if (!pot || pot.status !== 'open') return;
-  pot.status = 'cancelling';
-  cancelPot(pot.gameId)
-    .then(r => { pot.status = r.ok ? 'cancelled' : 'open'; pot.cancelTx = r.txHash; })
-    .catch(err => { pot.status = 'open'; pot.error = String(err?.shortMessage ?? err); });
-}
-
-/**
- * Pay the pot: paying players who survive on the winning team split it,
- * minus the rake. If none did, the contract refunds every entrant minus the
- * rake. Patches the reveal like the other end-of-game settlements.
- */
-function settleRoomPot(room) {
-  const pot = room.pot;
-  const g = room.game;
-  if (!pot || pot.status !== 'open') return;
-  const winners = [...new Set(Object.values(g.players)
-    .filter(p => p.alive && p.team === g.winner && p.wallet)
-    .map(p => p.wallet))];
-  pot.status = 'settling';
-  settlePot(pot.gameId, winners)
-    .then(r => {
-      pot.status = r.ok ? 'settled' : 'open';
-      pot.settleTx = r.txHash;
-      if (g.reveal) {
-        g.reveal.pot = {
-          fee: pot.fee, entrants: pot.entrants.length, winners,
-          share: r.share, rake: r.rake, txHash: r.txHash, url: r.url, refunded: winners.length === 0,
-        };
-      }
-    })
-    .catch(err => { pot.status = 'open'; pot.error = String(err?.shortMessage ?? err); })
-    .finally(() => broadcast(room));
-}
-
-/** What a client needs to pay into this table. */
-function potSummary(pot) {
-  if (!pot) return null;
-  return {
-    fee: pot.fee, gameId: pot.gameId, address: pot.address, status: pot.status,
-    entrants: pot.entrants.length, openTx: pot.openTx ?? null, settleTx: pot.settleTx ?? null,
-  };
 }
 
 export function getRoom(code) {
@@ -196,7 +102,7 @@ export function roomSummary(room) {
     name: room.name,
     isPublic: room.isPublic,
     humans: humanCount(room),
-    capacity: room.players,
+    capacity: CONFIG.GAME.PLAYERS,
     spectators: [...room.sockets.values()].filter(m => m.role === 'spectator').length,
     started: g.started,
     phase: g.phase,
@@ -205,13 +111,11 @@ export function roomSummary(room) {
     winner: g.winner,
     // Empty seats auto-fill with bots, so a game is always joinable until it
     // ends — "open" here means "you can still take a seat", not "waiting".
-    joinable: !g.winner && humanCount(room) < room.players,
+    joinable: !g.winner && humanCount(room) < CONFIG.GAME.PLAYERS,
     hostId: room.hostId,
     /** Seconds until bots take over, or null if a human is expected. */
     autoStartIn: room.autoStartAt ? Math.max(0, Math.round((room.autoStartAt - Date.now()) / 1000)) : null,
     createdAt: room.createdAt,
-    entryFee: room.entryFee,
-    pot: potSummary(room.pot),
   };
 }
 
@@ -313,11 +217,9 @@ export function canStart(room, token) {
  * given whatever seat happened to be free — a different human, a different
  * team, someone else's bribes.
  */
-export function seatPlayer(room, ws, { name, token, playerId, wallet } = {}) {
+export function seatPlayer(room, ws, { name, token, playerId } = {}) {
   const g = room.game;
-  // A paid wallet always gets its own seat back: one entry fee, one seat.
-  const walletSeat = wallet && room.walletSeats.get(wallet.toLowerCase());
-  const resumedId = (token && room.seatTokens.get(token)) || walletSeat;
+  const resumedId = token && room.seatTokens.get(token);
   const seat = (resumedId && g.players[resumedId])
     ?? (playerId ? g.players[playerId] : null)
     ?? randomOpenSeat(g);
@@ -326,14 +228,6 @@ export function seatPlayer(room, ws, { name, token, playerId, wallet } = {}) {
   if (!seat.alive && !resumedId) return { error: 'No living seats left in this game.' };
 
   claimSeat(g, seat.id, name);
-  if (wallet) {
-    // The payout address. Kept even if the human disconnects and a bot takes
-    // over: their seat can still win, and they paid for it.
-    const w = wallet.toLowerCase();
-    seat.wallet = w;
-    room.walletSeats.set(w, seat.id);
-    if (room.pot && !room.pot.entrants.includes(w)) room.pot.entrants.push(w);
-  }
   room.sockets.set(ws, { role: 'player', playerId: seat.id });
   room.lastSeenAt = Date.now();
 
@@ -396,88 +290,44 @@ function randomOpenSeat(state) {
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
 export async function startRoom(room) {
-  // `starting` covers the awaits below: staking and the role commitment are
-  // chain round trips, and a second START (or the auto-starter) arriving
-  // during them would otherwise launch a second loop on the same game.
-  if (room.loop || room.starting) return { ok: false, error: 'Already running' };
-  room.starting = true;
+  if (room.loop) return { ok: false, error: 'Already running' };
 
-  try {
-    const game = room.game;
+  // Publish the role commitment BEFORE the first tick. Committing afterwards
+  // would prove nothing (PRD §10.4).
+  const commit = await commitRoles(room.game).catch(() => null);
+  room.game.started = true;
+  room.game.clockStartedAt = Date.now();   // the day/night clock runs from here
 
-    // Every agent starts the game holding exactly its stake ON CHAIN, or the
-    // in-memory 5.0 each describes balances the wallets do not have. If that
-    // cannot be arranged the game still runs, mocked, and says so loudly
-    // rather than settling against the wrong numbers.
-    let stake = null;
-    if (game.onChain) {
-      stake = await stakeAgents(Object.keys(game.players)).catch(err => ({ ok: false, error: String(err?.message ?? err) }));
-      if (!stake.ok) {
-        game.onChain = false;
-        game.chainError = stake.error;
-        console.error(`\n  room ${room.code}: staking failed, this game runs MOCKED\n  ${stake.error}\n`);
-      }
-    }
-
-    // Publish the role commitment BEFORE the first tick. Committing afterwards
-    // would prove nothing (PRD §10.4).
-    const commit = await commitRoles(game).catch(() => null);
-    game.started = true;
-
-    if (process.env.RECORD === 'true' && !isRecording()) {
-      room.recordingFile = startRecording({ seed: game.seed, room: room.code });
-    }
-
-    const running = () => room.loop && room.game === game;
-
-    /**
-     * One tick, start to finish, then schedule the next.
-     *
-     * This was a setInterval that fired every TICK_MS whether or not the
-     * previous tick had finished. Live settlement can outlast a tick, and the
-     * result was two ticks deliberating and settling on the same state at
-     * once. Each tick now completes before the next begins, and the MOVE
-     * window always gets its full share even when settlement runs long.
-     */
-    const step = async () => {
-      if (!running()) return;
-      const began = Date.now();
-      await runTick(game, () => broadcast(room));
-
-      // MOVE window: humans act over WebSocket, bots are stepped near the end.
-      await new Promise(r => setTimeout(r, Math.floor(CONFIG.GAME.TICK_MS * 0.6)));
-      if (!running()) return;
-      stepAllBots(game);
-      const winner = resolveTick(game);
-      broadcast(room);
-      if (winner) {
-        // Let this tick's settlements (bounty claims) land before the payout.
-        await Promise.allSettled([...game.chainOps]);
-        if (running()) finishRoom(room);
-        return;
-      }
-      room.loop = setTimeout(step, Math.max(0, CONFIG.GAME.TICK_MS - (Date.now() - began)));
-    };
-
-    room.loop = setTimeout(step, 0);
-
-    return {
-      ok: true,
-      onChain: game.onChain,
-      ...(game.chainError ? { chainError: game.chainError } : {}),
-      stake: stake?.ok ? { txs: stake.txHashes.length, treasury: stake.treasury } : null,
-      recording: room.recordingFile,
-      roleCommit: commit ? { commitment: commit.commitment, txHash: commit.txHash } : null,
-    };
-  } finally {
-    room.starting = false;
+  if (process.env.RECORD === 'true' && !isRecording()) {
+    room.recordingFile = startRecording({ seed: room.game.seed, room: room.code });
   }
+
+  const step = async () => {
+    await runTick(room.game, () => broadcast(room));
+
+    // MOVE window: humans act over WebSocket, bots are stepped near the end.
+    const moveWindow = Math.floor(CONFIG.GAME.TICK_MS * 0.6);
+    setTimeout(() => {
+      stepAllBots(room.game);
+      const winner = resolveTick(room.game);
+      broadcast(room);
+      if (winner) finishRoom(room);
+    }, moveWindow);
+  };
+
+  step();
+  room.loop = setInterval(step, CONFIG.GAME.TICK_MS);
+
+  return {
+    ok: true,
+    recording: room.recordingFile,
+    roleCommit: commit ? { commitment: commit.commitment, txHash: commit.txHash } : null,
+  };
 }
 
 export function finishRoom(room) {
   stopRoomLoop(room);
   const reveal = endGame(room.game, () => broadcast(room));
-  settleRoomPot(room);
   if (isRecording() && room.recordingFile) {
     captureReveal(reveal);
     stopRecording().then(r => console.log(`  recording closed (${r.frames} frames)`));
@@ -486,7 +336,7 @@ export function finishRoom(room) {
 }
 
 export function stopRoomLoop(room) {
-  if (room.loop) clearTimeout(room.loop);
+  if (room.loop) clearInterval(room.loop);
   room.loop = null;
   if (room.broadcastTimer) clearTimeout(room.broadcastTimer);
   room.broadcastTimer = null;
@@ -494,10 +344,7 @@ export function stopRoomLoop(room) {
 
 export function resetRoom(room, seed) {
   stopRoomLoop(room);
-  if (!room.game.reveal) abandonPot(room);
-  room.game = newGame(room, seed);
-  room.pot = newPot(room);
-  room.walletSeats = new Map();
+  room.game = createGame({ seed: seed ?? Date.now() });
   room.seatTokens = new Map();
   broadcast(room);
   return room;
@@ -507,7 +354,6 @@ export function closeRoom(code) {
   const room = rooms.get(code);
   if (!room) return false;
   stopRoomLoop(room);
-  if (!room.game.reveal) abandonPot(room);
   for (const ws of room.sockets.keys()) { try { ws.close(); } catch { /* already gone */ } }
   return rooms.delete(code);
 }
@@ -548,7 +394,7 @@ export function tickAutoStart(now = Date.now()) {
 
     // A full table has nobody left to wait for, so give the host only a short
     // grace period rather than the full ninety seconds.
-    const wait = humans >= room.players ? 15_000 : AUTO_START_MS;
+    const wait = humans >= CONFIG.GAME.PLAYERS ? 15_000 : AUTO_START_MS;
     if (!room.autoStartAt) room.autoStartAt = now + wait;
     else if (now >= room.autoStartAt) {
       room.autoStartAt = null;
@@ -559,6 +405,28 @@ export function tickAutoStart(now = Date.now()) {
 
 export function startAutoStarter(intervalMs = 3_000) {
   const t = setInterval(() => tickAutoStart(), intervalMs);
+  t.unref?.();
+  return t;
+}
+
+/**
+ * Day/night watcher. State is otherwise pushed on ticks and moves; dusk, dawn
+ * and a flashlight running flat happen between them, and each changes what a
+ * player can see, so the room is re-sent the moment any of them flips.
+ */
+export function tickClocks(now = Date.now()) {
+  for (const room of rooms.values()) {
+    const g = room.game;
+    if (!g.started || g.winner) continue;
+    const sig = gameClock(g, now).phase + Object.values(g.players)
+      .map(p => (flashlightState(g, p, now).on ? 1 : 0)).join('');
+    if (room.lightSig !== undefined && sig !== room.lightSig) broadcast(room);
+    room.lightSig = sig;
+  }
+}
+
+export function startClockWatch(intervalMs = 1_000) {
+  const t = setInterval(() => tickClocks(), intervalMs);
   t.unref?.();
   return t;
 }

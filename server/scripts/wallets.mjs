@@ -48,8 +48,11 @@ try {
 
 const rows = balances ?? [w.engine, ...w.agents].map(x => ({ id: x.id, address: x.address, balance: null }));
 
-console.log('  Only the engine needs MON: it pays gas for every settlement. Agents only sign,');
-console.log(`  and are staked ${STAKE} KHIA from the engine's treasury when each game starts.\n`);
+console.log(
+  MODE === 'prove'
+    ? '  target: MINIMUM to prove Phase 1 (`npm run phase1`)   — add --play for a full 8-agent game\n'
+    : `  target: FULL live game, ${AGENT_COUNT} agents at ${STAKE} MON stake\n`
+);
 
 let short = 0;
 let deficit = 0;
@@ -58,7 +61,7 @@ for (const r of rows) {
   const bal = r.balance;
   let flag = '';
   if (bal !== null) {
-    if (want === 0) flag = '  —  (signs only, needs no MON)';
+    if (want === 0) flag = '  —  (receives only)';
     else if (bal >= want) flag = '  ok';
     else { flag = `  NEEDS ${(want - bal).toFixed(2)} MON`; short++; deficit += want - bal; }
   } else if (want > 0) {

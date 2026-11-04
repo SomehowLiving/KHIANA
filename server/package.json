@@ -7,7 +7,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "headless": "node src/headless.js",
-    "test": "node game.test.mjs && node integration.test.mjs",
+    "test": "node game.test.mjs && node daynight.test.mjs && node integration.test.mjs",
     "wallets": "node scripts/wallets.mjs",
     "wallets:new": "node scripts/wallets.mjs --new",
     "fund": "node scripts/fund.mjs",
@@ -15,9 +15,7 @@
     "x402": "node scripts/x402.mjs",
     "phase1": "node scripts/phase1.mjs",
     "phase1:local": "node scripts/phase1-local.mjs",
-    "playback": "node src/playback.js",
-    "game:onchain": "node scripts/onchain-game.mjs",
-    "pot:test": "node scripts/paid-table.mjs"
+    "playback": "node src/playback.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.1",
